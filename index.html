@@ -52,7 +52,7 @@
   .b span { top: 1.1em; left: 50%; translate: -50% 0; transform-origin: top; text-align: center; }
 
   /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
-  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; background: var(--ink); pointer-events: none; }
+  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; pointer-events: none; }
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
   #grab::after { content: "‹ ›"; position: absolute; left: 50%; bottom: 12%; translate: -50% 0; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
   /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
@@ -82,6 +82,7 @@
     <img src="land.svg" alt="">
     <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the current day and night regions">
       <polygon id="night" fill="#182c60" fill-opacity=".3"/>
+      <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
     </svg>
     <div id="mid">
       <div id="grab" role="slider" tabindex="0" aria-label="Midnight line. Drag it, or use the arrow keys, to change the time." aria-valuemin="0" aria-valuemax="100"></div>
@@ -96,7 +97,7 @@
   <p><b>Device clock.</b> Every time and date on this page starts from your device's clock. If it is off by a few minutes, everything shown here is off by the same amount. Turn on automatic date and time in your system settings to fix it.</p>
   <p><b>Device timezone.</b> Not used. Each city shows its own time zone, and the two dates come from UTC.</p>
   <p><b>Timezone database.</b> Each city's daylight-saving rules come from a database built into your browser. If a country changed its rules recently and your browser hasn't caught up, that city can be off by an hour. Updating your browser fixes it.</p>
-  <p><b>Midnight line.</b> It is placed by longitude, so real time zone borders differ slightly. A city near the line can show a different date than its side of the line suggests.</p>
+  <p><b>Midnight line.</b> It is placed by longitude and bends around cities so that each one is on the side matching its date. Away from the cities, real time zone borders differ slightly.</p>
 </details>
 
 <script>
@@ -237,6 +238,24 @@ $("grab").onkeydown = e => {                               // the line moves lef
   setTime(Math.round(now() / MIN) * MIN + dir * (e.shiftKey ? HOUR : 15 * MIN));
 };
 
+// The midnight line. It follows the meridian where midnight falls, but bends around any city whose
+// local date puts it on the other side, so the line never contradicts the times shown on the map.
+function midnightLine(t, x0) {
+  const rightDay = Math.floor((t + 12 * HOUR) / DAY);
+  const at = [[0, x0], [180, x0]], shoulders = [];            // points on the line at each city, and where bends start and end
+  for (const c of CITIES) {
+    const w = wall(c, t), x = c.lon + 180, y = 90 - c.lat;
+    const onRight = Math.floor(Date.UTC(w.year, w.month - 1, w.day) / DAY) >= rightDay;   // later date: right of the line
+    const midnight = w.hour === 0 && w.minute === 0;               // 12:00 AM exactly: the line goes through the city
+    const bent = midnight ? x : onRight ? Math.min(x0, x - MARGIN) : Math.max(x0, x + MARGIN);
+    at.push([y, bent]);
+    if (bent !== x0) shoulders.push([y - BUMP, x0], [y + BUMP, x0]);
+  }
+  const free = shoulders.filter(([y]) => at.every(([ay]) => Math.abs(ay - y) > .5));    // a city's own point wins
+  return [...at, ...free].sort((p, q) => p[0] - q[0]).map(([y, x]) => x.toFixed(2) + "," + y.toFixed(2)).join(" ");
+}
+const MARGIN = 2.5, BUMP = 12;   // in degrees: clearance from a city's dot, and how far above and below a city the line starts bending
+
 // Update a field unless the person is typing in it.
 const put = (el, value) => { if (el !== document.activeElement && el.value !== value) el.value = value; };
 
@@ -247,6 +266,7 @@ function render() {
 
   $("night").setAttribute("points", nightPoints(s));
   $("mid").style.left = f * 100 + "%";
+  $("line").setAttribute("points", midnightLine(t, f * 360));
   $("grab").setAttribute("aria-valuenow", Math.round(f * 100));
   $("now").hidden = fixed === null;
 
