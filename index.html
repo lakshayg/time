@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World clock</title>
+<meta name="description" content="Current local time in major cities on a world map, with a live day/night line.">
+<style>
+  :root {
+    --ink: #16222e;
+    --muted: #5b6d7e;
+    --sun: #e8890c;
+    --moon: #3d5fd0;
+    --line: #d3dde6;
+    --card: rgba(255, 255, 255, .88);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; padding: 1.5rem clamp(.75rem, 3vw, 2rem) 3rem; max-width: 1232px; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  :focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem; margin-bottom: 1rem; }
+  h1 { margin: 0; font: 600 1.6rem/1.2 ui-serif, Georgia, serif; }
+  .scrub { margin-left: auto; display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: .9rem; }
+  .scrub input { width: min(260px, 40vw); accent-color: var(--sun); }
+  output { min-width: 5.5em; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+  button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 6px; padding: .2rem .7rem; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+
+  .scroll { overflow-x: auto; }
+  .map { position: relative; min-width: 700px; aspect-ratio: 2 / 1; overflow: hidden; border: 1px solid var(--line); border-radius: 8px;
+         background: #cfe3f0; font-size: clamp(9px, 1.15vw, 13px); line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .map > img, .map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .pin { --c: var(--moon); position: absolute; translate: -50% -50%; white-space: nowrap; }
+  .pin.day { --c: var(--sun); }
+  .pin i { display: block; width: .7em; height: .7em; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .18em color-mix(in srgb, var(--c) 25%, transparent); }
+  .pin span, #mid b { position: absolute; padding: .2em .45em; border-radius: 4px; background: var(--card); }
+  .pin span { transition: scale .12s ease-out; }
+  .pin:hover { z-index: 1; }
+  .pin:hover span { scale: 1.15; }
+  .pin em, .pin b { display: block; }
+  .pin em { font-style: normal; color: var(--muted); }
+  .pin b { font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .r span { left: 1.1em; top: 50%; translate: 0 -50%; transform-origin: left; }
+  .l span { right: 1.1em; top: 50%; translate: 0 -50%; transform-origin: right; text-align: right; }
+  .t span { bottom: 1.1em; left: 50%; translate: -50% 0; transform-origin: bottom; text-align: center; }
+  .b span { top: 1.1em; left: 50%; translate: -50% 0; transform-origin: top; text-align: center; }
+
+  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; background: var(--ink); }
+  #mid b { top: .7em; white-space: nowrap; }
+  #dateL { right: .4em; }
+  #dateR { left: .4em; }
+
+  details { margin-top: 1.25rem; padding: .6rem .85rem; border: 1px solid var(--line); border-radius: 8px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { margin: .6rem 0 0; max-width: 70ch; color: var(--muted); font-size: .92rem; }
+  details b { color: var(--ink); }
+  @media (prefers-reduced-motion: reduce) { .pin span { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>World clock</h1>
+  <div class="scrub">
+    <label for="shift">Shift time</label>
+    <input id="shift" type="range" min="-24" max="24" step="0.25" value="0">
+    <output id="shiftOut" for="shift">now</output>
+    <button id="reset" type="button">Now</button>
+  </div>
+</header>
+
+<div class="scroll">
+  <div class="map" id="map">
+    <img src="land.svg" alt="">
+    <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the current day and night regions">
+      <polygon id="night" fill="#182c60" fill-opacity=".3"/>
+    </svg>
+    <div id="mid"><b id="dateL"></b><b id="dateR"></b></div>
+  </div>
+</div>
+
+<details>
+  <summary>See something wrong?</summary>
+  <p><b>Device clock.</b> Every time and date on this page starts from your device's clock. If it is off by a few minutes, everything shown here is off by the same amount. Turn on automatic date and time in your system settings to fix it.</p>
+  <p><b>Device timezone.</b> Not used. Each city shows its own time zone, and the two dates come from UTC.</p>
+  <p><b>Timezone database.</b> Each city's daylight-saving rules come from a database built into your browser. If a country changed its rules recently and your browser hasn't caught up, that city can be off by an hour. Updating your browser fixes it.</p>
+  <p><b>Midnight line.</b> It is placed by longitude, so real time zone borders differ slightly. A city near the line can show a different date than its side of the line suggests.</p>
+</details>
+
+<script>
+// To change the cities, edit this list. tz is an IANA time zone name.
+// label is the side of the dot the text sits on: r(ight), l(eft), t(op) or b(ottom).
+const CITIES = [
+  { name: "Los Angeles",   tz: "America/Los_Angeles",             lat: 34.05,  lon: -118.24, label: "r" },
+  { name: "New York",      tz: "America/New_York",                lat: 40.71,  lon: -74.01,  label: "r" },
+  { name: "Lima",          tz: "America/Lima",                    lat: -12.05, lon: -77.04,  label: "r" },
+  { name: "São Paulo",     tz: "America/Sao_Paulo",               lat: -23.55, lon: -46.63,  label: "r" },
+  { name: "London",        tz: "Europe/London",                   lat: 51.51,  lon: -0.13,   label: "l" },
+  { name: "Berlin",        tz: "Europe/Berlin",                   lat: 52.52,  lon: 13.4,    label: "t" },
+  { name: "Moscow",        tz: "Europe/Moscow",                   lat: 55.76,  lon: 37.62,   label: "r" },
+  { name: "Lagos",         tz: "Africa/Lagos",                    lat: 6.52,   lon: 3.38,    label: "r" },
+  { name: "Cairo",         tz: "Africa/Cairo",                    lat: 30.04,  lon: 31.24,   label: "l" },
+  { name: "Dubai",         tz: "Asia/Dubai",                      lat: 25.2,   lon: 55.27,   label: "b" },
+  { name: "New Delhi",     tz: "Asia/Kolkata",                    lat: 28.61,  lon: 77.21,   label: "t" },
+  { name: "Singapore",     tz: "Asia/Singapore",                  lat: 1.35,   lon: 103.82,  label: "r" },
+  { name: "Shanghai",      tz: "Asia/Shanghai",                   lat: 31.23,  lon: 121.47,  label: "b" },
+  { name: "Tokyo",         tz: "Asia/Tokyo",                      lat: 35.68,  lon: 139.69,  label: "r" },
+  { name: "Sydney",        tz: "Australia/Sydney",                lat: -33.87, lon: 151.21,  label: "l" },
+];
+
+const RAD = Math.PI / 180;
+const $ = id => document.getElementById(id);
+const HOUR = 36e5;
+
+// Where the sun is directly overhead: declination (radians) and longitude (degrees).
+// Uses the standard approximation for declination and the equation of time.
+function sun(t) {
+  const d = new Date(t);
+  const n = (t - Date.UTC(d.getUTCFullYear(), 0, 0)) / 864e5;        // day of year
+  const B = (n - 81) * 2 * Math.PI / 365;
+  const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);  // minutes
+  return {
+    dec: -23.44 * RAD * Math.cos((n + 10) * 2 * Math.PI / 365),
+    lon: -15 * ((t % 864e5) / HOUR - 12 + eot / 60),
+  };
+}
+
+// A place is in daylight when the sun is above its horizon.
+const isDay = (c, s) =>
+  Math.sin(c.lat * RAD) * Math.sin(s.dec) +
+  Math.cos(c.lat * RAD) * Math.cos(s.dec) * Math.cos((c.lon - s.lon) * RAD) > 0;
+
+// The night region: the sunrise/sunset line, closed off through the dark pole.
+function nightPoints(s) {
+  const tan = Math.tan(s.dec) || 1e-4;
+  const pts = [];
+  for (let lon = -180; lon <= 180; lon++)
+    pts.push(`${lon + 180},${90 - Math.atan(-Math.cos((lon - s.lon) * RAD) / tan) / RAD}`);
+  const pole = s.dec > 0 ? 180 : 0;
+  return pts.concat(`360,${pole}`, `0,${pole}`).join(" ");
+}
+
+const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+
+for (const c of CITIES) {
+  c.fmt = new Intl.DateTimeFormat([], { timeZone: c.tz, hour: "2-digit", minute: "2-digit" });
+  c.pin = document.createElement("div");
+  c.pin.className = "pin " + c.label;
+  c.pin.style.cssText = `left: ${(c.lon + 180) / 3.6}%; top: ${(90 - c.lat) / 1.8}%`;
+  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><b></b></span>`;
+  c.time = c.pin.querySelector("b");
+  $("map").append(c.pin);
+}
+
+function render() {
+  const shift = +$("shift").value;
+  const t = Date.now() + shift * HOUR;
+  const s = sun(t);
+  const f = ((12 - (t % 864e5) / HOUR) / 24 + 1) % 1;   // where it is midnight, as a fraction of the map width
+
+  $("night").setAttribute("points", nightPoints(s));
+  $("shiftOut").textContent = shift ? (shift > 0 ? "+" : "−") + Math.abs(shift) + " h" : "now";
+  $("mid").style.left = f * 100 + "%";
+  $("dateL").textContent = dateFmt.format(t - 12 * HOUR);   // the date just before midnight
+  $("dateR").textContent = dateFmt.format(t + 12 * HOUR);   // the date just after it
+  $("dateL").hidden = f < .1;                               // no room beside the line
+  $("dateR").hidden = f > .9;
+
+  for (const c of CITIES) {
+    c.pin.classList.toggle("day", isDay(c, s));
+    c.time.textContent = c.fmt.format(t);
+  }
+}
+
+$("shift").oninput = render;
+$("reset").onclick = () => { $("shift").value = 0; render(); };
+render();
+setInterval(render, 1000);
+</script>
+</body>
+</html>
