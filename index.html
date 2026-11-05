@@ -74,7 +74,7 @@
 <body>
 <header>
   <h1>World clock</h1>
-  <p class="hint">Drag the midnight line, or edit any time or date.</p>
+  <p class="hint" id="hint">Drag the midnight line, or edit any time or date.</p>
 </header>
 
 <div class="scroll">
@@ -161,7 +161,7 @@ const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", 
 const DAY = 864e5, MIN = 6e4;
 const two = n => String(n).padStart(2, "0");
 
-// The moment being shown. null means live; otherwise it stays put until Now is pressed.
+// The moment being shown. null means live; otherwise it stays put until the page is reloaded.
 let fixed = null;
 const now = () => fixed ?? Date.now();
 const setTime = t => { fixed = t; render(); };
@@ -299,11 +299,13 @@ const put = (el, value) => { if (el !== document.activeElement && el.value !== v
 // Everything on the page changes by at most a minute's worth, so while live it is redrawn once a minute, when
 // the minute changes. Anything the person does redraws straight away. (The map is the costly part to repaint,
 // especially on phones, so it is not redrawn every second.)
+const liveHint = $("hint").textContent;
 let drawnMinute = -1;
 function render(force = true) {
   const t = now(), minute = Math.floor(t / MIN);
   if (!force && minute === drawnMinute) return;
   drawnMinute = minute;
+  $("hint").textContent = fixed === null ? liveHint : "Paused. Reload to go live again.";   // once anything is edited the clocks stop following the device
   const s = sun(t);
   const f = 1 - ((((t % DAY) / HOUR - 12) / 24) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width. At exactly 12:00 UTC it is on the right edge, where the dates change
 

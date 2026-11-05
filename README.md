@@ -28,7 +28,7 @@ Static page: no framework, no bundler, no dependencies at runtime. Light mode on
 - Sun position from day-of-year declination and the equation of time. The night region is a single polygon (the terminator closed through the dark pole), 30% opacity. Smooth bands were tried and dropped as unnecessary complexity.
 
 ## Time model
-- A single state: `fixed` (`null` = live, otherwise a frozen instant). `render()` updates everything from `now()`. While live, a once-a-second check redraws everything only when the minute changes (the map is the costly part to repaint, especially on phones). Any edit redraws at once. Reload returns to live (there is no "Now" button).
+- A single state: `fixed` (`null` = live, otherwise a frozen instant). `render()` updates everything from `now()`. While live, a once-a-second check redraws everything only when the minute changes (the map is the costly part to repaint, especially on phones). Any edit redraws at once. Reload returns to live (there is no "Now" button). The hint beside the title says "Drag the midnight line, or edit any time or date." while live and "Paused. Reload to go live again." once frozen.
 - **Everything is editable.** Any edit sets `fixed`, and all other times, dates and the line follow.
   - City time: a text field (`6:19 pm`, `18:19`, `619p`, `3.30pm` all parse). Enter or blur commits, invalid input reverts. It picks the moment closest to the shown time, so 11:58 PM to 12:10 AM moves forward 12 minutes. Wall time to instant uses a two-pass zone-offset conversion (DST-aware). A native time input was dropped because its spacing can't be styled.
   - Dates: plain-text pills with a transparent native `<input type="date">` over them (opens the picker). Range 1970 to 2100.
