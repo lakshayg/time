@@ -21,9 +21,7 @@
 
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem; margin-bottom: 1rem; }
   h1 { margin: 0; font: 600 1.6rem/1.2 ui-serif, Georgia, serif; }
-  .scrub { margin-left: auto; display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: .9rem; }
-  .scrub input { width: min(260px, 40vw); accent-color: var(--sun); }
-  output { min-width: 5.5em; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .hint { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
   button { font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 6px; padding: .2rem .7rem; cursor: pointer; }
   button:hover { border-color: var(--muted); }
 
@@ -35,22 +33,29 @@
   .pin { --c: var(--moon); position: absolute; translate: -50% -50%; white-space: nowrap; }
   .pin.day { --c: var(--sun); }
   .pin i { display: block; width: .7em; height: .7em; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .18em color-mix(in srgb, var(--c) 25%, transparent); }
-  .pin span, #mid b { position: absolute; padding: .2em .45em; border-radius: 4px; background: var(--card); }
+  .pin span { position: absolute; padding: .2em .45em; border-radius: 4px; background: var(--card); }
   .pin span { transition: scale .12s ease-out; }
   .pin:hover { z-index: 1; }
   .pin:hover span { scale: 1.15; }
-  .pin em, .pin b { display: block; }
-  .pin em { font-style: normal; color: var(--muted); }
-  .pin b { font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .pin em { display: block; font-style: normal; color: var(--muted); }
+  .map input { display: block; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; }
+  .map input::-webkit-calendar-picker-indicator { display: none; }
+  .pin input { font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
   .r span { left: 1.1em; top: 50%; translate: 0 -50%; transform-origin: left; }
   .l span { right: 1.1em; top: 50%; translate: 0 -50%; transform-origin: right; text-align: right; }
   .t span { bottom: 1.1em; left: 50%; translate: -50% 0; transform-origin: bottom; text-align: center; }
   .b span { top: 1.1em; left: 50%; translate: -50% 0; transform-origin: top; text-align: center; }
 
-  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; background: var(--ink); }
-  #mid b { top: .7em; white-space: nowrap; }
-  #dateL { right: .4em; }
-  #dateR { left: .4em; }
+  /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
+  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; background: var(--ink); pointer-events: none; }
+  #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
+  #grab::after { content: "‹ ›"; position: absolute; left: 50%; bottom: 12%; translate: -50% 0; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
+  .date { position: absolute; top: .7em; display: flex; align-items: center; gap: .35em; padding: .2em .45em; border-radius: 4px; background: var(--card); white-space: nowrap; pointer-events: auto; }
+  .date span { font-weight: 600; }
+  .date input { font-weight: 600; }
+  .date input::-webkit-calendar-picker-indicator { display: inline-block; opacity: .55; cursor: pointer; }
+  #pillL { right: .4em; }
+  #pillR { left: .4em; }
 
   details { margin-top: 1.25rem; padding: .6rem .85rem; border: 1px solid var(--line); border-radius: 8px; }
   summary { cursor: pointer; font-weight: 600; }
@@ -62,12 +67,8 @@
 <body>
 <header>
   <h1>World clock</h1>
-  <div class="scrub">
-    <label for="shift">Shift time</label>
-    <input id="shift" type="range" min="-24" max="24" step="0.25" value="0">
-    <output id="shiftOut" for="shift">now</output>
-    <button id="reset" type="button">Now</button>
-  </div>
+  <p class="hint">Drag the midnight line, or edit any time or date.</p>
+  <button id="now" type="button" hidden>Now</button>
 </header>
 
 <div class="scroll">
@@ -76,7 +77,11 @@
     <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the current day and night regions">
       <polygon id="night" fill="#182c60" fill-opacity=".3"/>
     </svg>
-    <div id="mid"><b id="dateL"></b><b id="dateR"></b></div>
+    <div id="mid">
+      <div id="grab" role="slider" tabindex="0" aria-label="Midnight line. Drag it, or use the arrow keys, to change the time." aria-valuemin="0" aria-valuemax="100"></div>
+      <label class="date" id="pillL"><span id="dowL"></span><input id="dateL" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just before midnight"></label>
+      <label class="date" id="pillR"><span id="dowR"></span><input id="dateR" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just after midnight"></label>
+    </div>
   </div>
 </div>
 
@@ -94,7 +99,7 @@
 const CITIES = [
   { name: "Los Angeles",   tz: "America/Los_Angeles",             lat: 34.05,  lon: -118.24, label: "r" },
   { name: "New York",      tz: "America/New_York",                lat: 40.71,  lon: -74.01,  label: "r" },
-  { name: "Lima",          tz: "America/Lima",                    lat: -12.05, lon: -77.04,  label: "r" },
+  { name: "Lima",          tz: "America/Lima",                    lat: -12.05, lon: -77.04,  label: "l" },
   { name: "São Paulo",     tz: "America/Sao_Paulo",               lat: -23.55, lon: -46.63,  label: "r" },
   { name: "London",        tz: "Europe/London",                   lat: 51.51,  lon: -0.13,   label: "l" },
   { name: "Berlin",        tz: "Europe/Berlin",                   lat: 52.52,  lon: 13.4,    label: "t" },
@@ -141,42 +146,104 @@ function nightPoints(s) {
   return pts.concat(`360,${pole}`, `0,${pole}`).join(" ");
 }
 
-const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const dowFmt = new Intl.DateTimeFormat([], { weekday: "short", timeZone: "UTC" });
+const DAY = 864e5, MIN = 6e4;
+const two = n => String(n).padStart(2, "0");
+
+// The moment being shown. null means live; otherwise it stays put until Now is pressed.
+let fixed = null;
+const now = () => fixed ?? Date.now();
+const setTime = t => { fixed = t; render(); };
+
+// A city's wall-clock time at instant t, and how far its zone is ahead of UTC then.
+const wall = (c, t) => Object.fromEntries(c.fmt.formatToParts(t).filter(p => p.type !== "literal").map(p => [p.type, +p.value]));
+const zoneOffset = (c, t) => { const w = wall(c, t); return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second) - Math.floor(t / 1000) * 1000; };
+
+// Editing a city's time: pick the moment closest to now that shows that time there,
+// so changing 11:58 PM to 12:10 AM moves forward 12 minutes, not back a day.
+function setCityTime(c, hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const t = now(), w = wall(c, t);
+  let best = null;
+  for (const d of [-1, 0, 1]) {
+    const local = Date.UTC(w.year, w.month - 1, w.day + d, h, m);           // the wall time, read as if it were UTC
+    const moment = local - zoneOffset(c, local - zoneOffset(c, local));
+    if (best === null || Math.abs(moment - t) < Math.abs(best - t)) best = moment;
+  }
+  setTime(best);
+}
+
+// Editing one of the two dates: move by whole days. hours is -12 for the left date, +12 for the right.
+function setDate(hours, value) {
+  const year = +value.slice(0, 4);
+  if (year < 1970 || year > 2100) return;                  // ignore half-typed years
+  const t = now();
+  setTime(t + (Date.parse(value) / DAY - Math.floor((t + hours * HOUR) / DAY)) * DAY);
+}
 
 for (const c of CITIES) {
-  c.fmt = new Intl.DateTimeFormat([], { timeZone: c.tz, hour: "2-digit", minute: "2-digit" });
+  c.fmt = new Intl.DateTimeFormat("en-GB", { timeZone: c.tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" });
   c.pin = document.createElement("div");
   c.pin.className = "pin " + c.label;
   c.pin.style.cssText = `left: ${(c.lon + 180) / 3.6}%; top: ${(90 - c.lat) / 1.8}%`;
-  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><b></b></span>`;
-  c.time = c.pin.querySelector("b");
+  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><input type="time" aria-label="${c.name} time"></span>`;
+  c.time = c.pin.querySelector("input");
+  c.time.oninput = () => c.time.value && setCityTime(c, c.time.value);
   $("map").append(c.pin);
 }
+$("dateL").oninput = e => e.target.value && setDate(-12, e.target.value);
+$("dateR").oninput = e => e.target.value && setDate(12, e.target.value);
+$("now").onclick = () => { fixed = null; render(); };
+
+// Dragging the midnight line. Moving it right by a map width goes back 24 hours.
+let drag = null;
+$("grab").onpointerdown = e => {
+  e.preventDefault();
+  $("grab").focus();
+  $("grab").setPointerCapture(e.pointerId);
+  drag = { x: e.clientX, t: now() };
+};
+$("grab").onpointermove = e => {
+  if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / $("map").clientWidth * DAY) / MIN) * MIN);
+};
+$("grab").onpointerup = $("grab").onpointercancel = () => { drag = null; };
+$("grab").onkeydown = e => {                               // the line moves left as time moves forward
+  const dir = { ArrowLeft: 1, ArrowRight: -1 }[e.key];
+  if (!dir) return;
+  e.preventDefault();
+  setTime(Math.round(now() / MIN) * MIN + dir * (e.shiftKey ? HOUR : 15 * MIN));
+};
+
+// Update a field unless the person is typing in it.
+const put = (el, value) => { if (el !== document.activeElement && el.value !== value) el.value = value; };
 
 function render() {
-  const shift = +$("shift").value;
-  const t = Date.now() + shift * HOUR;
+  const t = now();
   const s = sun(t);
-  const f = ((12 - (t % 864e5) / HOUR) / 24 + 1) % 1;   // where it is midnight, as a fraction of the map width
+  const f = ((12 - (t % DAY) / HOUR) / 24 + 1) % 1;   // where it is midnight, as a fraction of the map width
 
   $("night").setAttribute("points", nightPoints(s));
-  $("shiftOut").textContent = shift ? (shift > 0 ? "+" : "−") + Math.abs(shift) + " h" : "now";
   $("mid").style.left = f * 100 + "%";
-  $("dateL").textContent = dateFmt.format(t - 12 * HOUR);   // the date just before midnight
-  $("dateR").textContent = dateFmt.format(t + 12 * HOUR);   // the date just after it
-  $("dateL").hidden = f < .1;                               // no room beside the line
-  $("dateR").hidden = f > .9;
+  $("grab").setAttribute("aria-valuenow", Math.round(f * 100));
+  $("now").hidden = fixed === null;
+
+  for (const [side, hours, room] of [["L", -12, f], ["R", 12, 1 - f]]) {   // the dates just before and just after midnight
+    put($("date" + side), new Date(t + hours * HOUR).toISOString().slice(0, 10));
+    $("dow" + side).textContent = dowFmt.format(t + hours * HOUR);
+    const pill = $("pill" + side);
+    pill.style.visibility = room * $("map").clientWidth < pill.offsetWidth + 16 ? "hidden" : "";   // no room beside the line
+  }
 
   for (const c of CITIES) {
+    const w = wall(c, t);
     c.pin.classList.toggle("day", isDay(c, s));
-    c.time.textContent = c.fmt.format(t);
+    put(c.time, two(w.hour) + ":" + two(w.minute));
   }
 }
 
-$("shift").oninput = render;
-$("reset").onclick = () => { $("shift").value = 0; render(); };
+addEventListener("focusout", () => setTimeout(render));   // drop half-typed values once the field is left
 render();
-setInterval(render, 1000);
+setInterval(() => { if (fixed === null) render(); }, 1000);
 </script>
 </body>
 </html>
