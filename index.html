@@ -54,6 +54,8 @@
 
   /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
   #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; pointer-events: none; }
+  #grab:focus-visible { outline: none; }   /* the strip is tall, so show keyboard focus on the knob instead */
+  .map:has(#grab:focus-visible) #knob { outline: 2px solid var(--sun); outline-offset: 2px; }
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
   #knob { z-index: 3; position: absolute; bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
   /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
@@ -227,7 +229,7 @@ $("now").onclick = () => { fixed = null; render(); };
 let drag = null;
 $("grab").onpointerdown = e => {
   e.preventDefault();
-  $("grab").focus();
+  $("grab").focus({ focusVisible: false });   // pointer focus needs no ring
   $("grab").setPointerCapture(e.pointerId);
   drag = { x: e.clientX, t: now() };
 };
