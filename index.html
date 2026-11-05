@@ -38,9 +38,14 @@
   .pin:hover { z-index: 1; }
   .pin:hover span { scale: 1.15; }
   .pin em { display: block; font-style: normal; color: var(--muted); }
-  .map input { display: block; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; text-align: inherit; }
+  .map input { display: block; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; }
   .map input::-webkit-calendar-picker-indicator { display: none; }
-  .pin input { font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .map input:focus-visible { outline: none; }
+  .pin input { font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; width: 8ch; border-radius: 3px; }
+  .pin input:hover, .pin input:focus { background: color-mix(in srgb, var(--sun) 14%, transparent); }
+  .l input { margin-left: auto; text-align: right; }
+  .t input, .b input { text-align: center; }
+  .t input, .b input { margin: 0 auto; }
   .r span { left: 1.1em; top: 50%; translate: 0 -50%; transform-origin: left; }
   .l span { right: 1.1em; top: 50%; translate: 0 -50%; transform-origin: right; text-align: right; }
   .t span { bottom: 1.1em; left: 50%; translate: -50% 0; transform-origin: bottom; text-align: center; }
@@ -50,10 +55,11 @@
   #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; background: var(--ink); pointer-events: none; }
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
   #grab::after { content: "‹ ›"; position: absolute; left: 50%; bottom: 12%; translate: -50% 0; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
-  .date { position: absolute; top: .7em; display: flex; align-items: center; gap: .35em; padding: .2em .45em; border-radius: 4px; background: var(--card); white-space: nowrap; pointer-events: auto; }
-  .date span { font-weight: 600; }
-  .date input { font-weight: 600; }
-  .date input::-webkit-calendar-picker-indicator { display: inline-block; opacity: .55; cursor: pointer; }
+  /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
+  .date { position: absolute; top: .7em; padding: .2em .5em; border-radius: 4px; background: var(--card); font-weight: 600; white-space: nowrap; pointer-events: auto; cursor: pointer; }
+  .date:hover { background: #fff; }
+  .date:focus-within { outline: 2px solid var(--sun); }
+  .date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   #pillL { right: .4em; }
   #pillR { left: .4em; }
 
@@ -79,8 +85,8 @@
     </svg>
     <div id="mid">
       <div id="grab" role="slider" tabindex="0" aria-label="Midnight line. Drag it, or use the arrow keys, to change the time." aria-valuemin="0" aria-valuemax="100"></div>
-      <label class="date" id="pillL"><span id="dowL"></span><input id="dateL" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just before midnight"></label>
-      <label class="date" id="pillR"><span id="dowR"></span><input id="dateR" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just after midnight"></label>
+      <label class="date" id="pillL"><span id="textL"></span><input id="dateL" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just before midnight, opens a calendar"></label>
+      <label class="date" id="pillR"><span id="textR"></span><input id="dateR" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just after midnight, opens a calendar"></label>
     </div>
   </div>
 </div>
@@ -146,7 +152,7 @@ function nightPoints(s) {
   return pts.concat(`360,${pole}`, `0,${pole}`).join(" ");
 }
 
-const dowFmt = new Intl.DateTimeFormat([], { weekday: "short", timeZone: "UTC" });
+const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 const DAY = 864e5, MIN = 6e4;
 const two = n => String(n).padStart(2, "0");
 
@@ -158,6 +164,18 @@ const setTime = t => { fixed = t; render(); };
 // A city's wall-clock time at instant t, and how far its zone is ahead of UTC then.
 const wall = (c, t) => Object.fromEntries(c.fmt.formatToParts(t).filter(p => p.type !== "literal").map(p => [p.type, +p.value]));
 const zoneOffset = (c, t) => { const w = wall(c, t); return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second) - Math.floor(t / 1000) * 1000; };
+
+// "6:19 pm", "06:19PM", "18:19" and "619p" all work. Returns "HH:MM" (24 h), or null if it isn't a time.
+function parseTime(text) {
+  const m = /^(\d{1,2})(?:[:.\s]?(\d{2}))?\s*([ap])?\.?m?\.?$/i.exec(text.trim());
+  if (!m) return null;
+  let h = +m[1];
+  const min = +(m[2] || 0), pm = m[3] && m[3].toLowerCase() === "p";
+  if (min > 59 || (m[3] ? h < 1 || h > 12 : h > 23)) return null;
+  if (m[3]) h = h % 12 + (pm ? 12 : 0);
+  return two(h) + ":" + two(min);
+}
+const clock = w => two(w.hour % 12 || 12) + ":" + two(w.minute) + (w.hour < 12 ? " AM" : " PM");
 
 // Editing a city's time: pick the moment closest to now that shows that time there,
 // so changing 11:58 PM to 12:10 AM moves forward 12 minutes, not back a day.
@@ -186,13 +204,18 @@ for (const c of CITIES) {
   c.pin = document.createElement("div");
   c.pin.className = "pin " + c.label;
   c.pin.style.cssText = `left: ${(c.lon + 180) / 3.6}%; top: ${(90 - c.lat) / 1.8}%`;
-  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><input type="time" aria-label="${c.name} time"></span>`;
+  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><input type="text" inputmode="text" autocomplete="off" spellcheck="false" aria-label="${c.name} time"></span>`;
   c.time = c.pin.querySelector("input");
-  c.time.oninput = () => c.time.value && setCityTime(c, c.time.value);
+  let fresh = false;                                            // keep the select-all from focus when the click's mouseup arrives (Safari undoes it)
+  c.time.onfocus = () => { fresh = true; c.time.select(); };
+  c.time.onmouseup = e => { if (fresh) e.preventDefault(); fresh = false; };
+  c.time.onkeydown = e => { if (e.key === "Enter") c.time.blur(); };
+  c.time.onchange = () => { const t = parseTime(c.time.value); if (t) setCityTime(c, t); };
   $("map").append(c.pin);
 }
 $("dateL").oninput = e => e.target.value && setDate(-12, e.target.value);
 $("dateR").oninput = e => e.target.value && setDate(12, e.target.value);
+for (const id of ["dateL", "dateR"]) $(id).onclick = e => { try { e.target.showPicker(); } catch {} };
 $("now").onclick = () => { fixed = null; render(); };
 
 // Dragging the midnight line. Moving it right by a map width goes back 24 hours.
@@ -229,7 +252,7 @@ function render() {
 
   for (const [side, hours, room] of [["L", -12, f], ["R", 12, 1 - f]]) {   // the dates just before and just after midnight
     put($("date" + side), new Date(t + hours * HOUR).toISOString().slice(0, 10));
-    $("dow" + side).textContent = dowFmt.format(t + hours * HOUR);
+    $("text" + side).textContent = dateFmt.format(t + hours * HOUR);
     const pill = $("pill" + side);
     pill.style.visibility = room * $("map").clientWidth < pill.offsetWidth + 16 ? "hidden" : "";   // no room beside the line
   }
@@ -237,7 +260,7 @@ function render() {
   for (const c of CITIES) {
     const w = wall(c, t);
     c.pin.classList.toggle("day", isDay(c, s));
-    put(c.time, two(w.hour) + ":" + two(w.minute));
+    put(c.time, clock(w));
   }
 }
 
