@@ -241,20 +241,43 @@ $("grab").onkeydown = e => {                               // the line moves lef
   setTime(Math.round(now() / MIN) * MIN + dir * (e.shiftKey ? HOUR : 15 * MIN));
 };
 
-// The midnight line. Every city has its own midnight line: where it would be midnight if the whole world
-// ran on that city's clock. It passes through the city's dot at the city's 12:00 AM, then keeps moving
-// at 15 degrees an hour, like the true meridian. So a city's line is always the true meridian plus a fixed
-// offset (the city's longitude minus its time zone's centre meridian). The midnight line joins these
-// offsets, city to city, down the map, and is the true meridian at the two poles.
-// Every city is therefore on the right side of the line at all times, and the line's shape never changes
-// during the day. It only slides left, as one piece.
-const wrap360 = d => ((d + 180) % 360 + 360) % 360 - 180;
+// The midnight line. Midnight sweeps west across the map, and at the top of each hour it sits exactly on one
+// time zone boundary: the one between clock-hour N-1 and N. We don't have the real boundaries, so we make
+// approximate ones from the cities on the map:
+//   1. a "base line" for every clock offset: a plain meridian, 15 degrees per hour
+//   2. a "real line" for every clock that has cities: from its meridian at the north pole, through each of
+//      its cities, to its meridian at the south pole
+//   3. a base line is deleted if any real line touches it (a real line replaces its own base line),
+//      or if it passes within NEAR degrees of any city (the line would linger beside that city's dot)
+// What is left are the boundaries. They never cross, and each city is exactly on its boundary at its 12:00 AM.
+// Between the hours the line blends the two boundaries either side of the current moment, so its shape changes
+// as it travels. It only bends where a city's boundary is passing.
+const NEAR = 3;                                                          // degrees of longitude
 function midnightLine(t, x0) {
-  const offsets = CITIES.map(c => {
-    const w = wall(c, t), hours = w.hour + w.minute / 60 + w.second / 3600;                  // the city's clock, since midnight
-    return [90 - c.lat, wrap360(c.lon + 180 - 15 * hours - x0)];                              // [y, how far its midnight line is from the true meridian]
-  });
-  return [[0, 0], ...offsets.sort((p, q) => p[0] - q[0]), [180, 0]].map(([y, d]) => (x0 + d).toFixed(2) + "," + y.toFixed(2)).join(" ");
+  const hoursUTC = (t % DAY) / HOUR;
+  const now = ((12 - hoursUTC) % 24 + 24) % 24 - 12;                    // the clock offset where it is midnight right now, -12 up to 12
+  const meridian = z => 180 + 15 * z;
+  const real = {};                                                       // the cities on each clock offset (hours ahead of UTC, from the timezone database)
+  for (const c of CITIES) (real[zoneOffset(c, t) / HOUR] ||= []).push([90 - c.lat, c.lon + 180]);
+  const lines = Object.entries(real).map(([z, cities]) => ({ z: +z, pts: [[0, meridian(z)], ...cities.sort((p, q) => p[0] - q[0]), [180, meridian(z)]] }));
+  for (let z = -12; z <= 12; z++) {                                      // the base lines that survive
+    const touched = lines.some(l => Math.min(...l.pts.map(p => p[1])) <= meridian(z) && meridian(z) <= Math.max(...l.pts.map(p => p[1])));
+    const close = CITIES.some(c => Math.abs(c.lon + 180 - meridian(z)) < NEAR);
+    if (!touched && !close) lines.push({ z, pts: [[0, meridian(z)], [180, meridian(z)]] });
+  }
+  lines.sort((p, q) => p.z - q.z);
+  const k = Math.max(0, Math.min(lines.length - 2, lines.findIndex(l => l.z > now) - 1));   // the two boundaries either side of "now"
+  const [from, to] = [lines[k], lines[k + 1]], mix = (now - from.z) / (to.z - from.z);
+  const xAt = (pts, y) => {                                              // a boundary's x at latitude y
+    let i = 0;
+    while (i < pts.length - 2 && y > pts[i + 1][0]) i++;
+    return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * (y - pts[i][0]) / (pts[i + 1][0] - pts[i][0]);
+  };
+  const ys = new Set([...CITIES.map(c => 90 - c.lat), ...Array(181).keys()]);
+  return [...ys].sort((p, q) => p - q).map(y => {
+    const x = (1 - mix) * xAt(from.pts, y) + mix * xAt(to.pts, y);       // where the line is at this latitude
+    return (x0 + x - meridian(now)).toFixed(2) + "," + y.toFixed(2);     // placed relative to the true meridian, which is where x0 is
+  }).join(" ");
 }
 
 // Update a field unless the person is typing in it.
