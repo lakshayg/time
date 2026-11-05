@@ -6,3 +6,8 @@ land.svg: gen.mjs | node_modules
 
 node_modules:
 	npm i world-atlas@2 topojson-client@3
+
+.PHONY: clean
+clean:
+	rm -f package-lock.json package.json land.svg
+	rm -rf node_modules
