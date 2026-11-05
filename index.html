@@ -254,6 +254,7 @@ function smoothThrough(pts) {
 }
 
 const NEAR = 3;                                                          // degrees of longitude
+const STRAIGHT_ABOVE = 12;                                               // 78 degrees north, just below the date pills: the lines are straight from here up, so the dates sit beside a straight line
 const STRAIGHT_BELOW = 90 + 57;                                          // 57 degrees south, below all land on the map: the lines are straight from here down, where the drag knob sits
 
 // The midnight line. Midnight sweeps west across the map, and at the top of each hour it sits exactly on one
@@ -261,7 +262,7 @@ const STRAIGHT_BELOW = 90 + 57;                                          // 57 d
 // approximate ones from the cities on the map:
 //   1. a "meridian line" for every clock offset: a plain meridian, 15 degrees per hour
 //   2. a "city line" for every clock that has cities: a smooth curve from its meridian at the north pole,
-//      through each of its cities, back to its meridian by STRAIGHT_BELOW, and down to the south pole
+//      down to STRAIGHT_ABOVE (just below the date pills), through each of its cities, back to its meridian by STRAIGHT_BELOW, and down to the south pole
 //   3. a meridian line is deleted if any city line touches it (a city line replaces its own meridian line),
 //      or if it passes within NEAR degrees of any city (the line would linger beside that city's dot)
 // What is left are the boundaries. They never cross, and each city is exactly on its boundary at its 12:00 AM.
@@ -274,7 +275,7 @@ function midnightLine(t, x0) {
   const byOffset = {};                                                   // the cities on each clock offset (hours ahead of UTC, from the timezone database)
   for (const c of CITIES) (byOffset[zoneOffset(c, t) / HOUR] ||= []).push([90 - c.lat, c.lon + 180]);
   const lines = Object.entries(byOffset).map(([z, cities]) => {            // the city lines
-    const pts = [[0, meridian(z)], ...cities.sort((p, q) => p[0] - q[0]), [STRAIGHT_BELOW, meridian(z)], [180, meridian(z)]];
+    const pts = [[0, meridian(z)], [STRAIGHT_ABOVE, meridian(z)], ...cities.sort((p, q) => p[0] - q[0]), [STRAIGHT_BELOW, meridian(z)], [180, meridian(z)]];
     return { z: +z, pts, at: smoothThrough(pts) };
   });
   for (let z = -12; z <= 12; z++) {                                      // the meridian lines that survive

@@ -44,9 +44,9 @@ Rule: **the line must never contradict the clocks on the map.** A city left of t
 
 It is built from approximate time zone boundaries (`midnightLine` in `index.html`):
 1. **Meridian lines**: one plain meridian per clock offset, `x = 180 + 15 * offset`, offsets -12 to 12.
-2. **City lines**: for each clock offset that has cities (offset from the browser's timezone database, so DST is respected), connect its meridian at the north pole, each of its cities, an anchor on its meridian at 57°S (below all land, so the line is straight where the knob sits), and its meridian at the south pole. Between neighbouring points it eases along half a cosine wave, so the line runs parallel to the meridians at every city, anchor and pole, and never leaves the range of its points.
+2. **City lines**: for each clock offset that has cities (offset from the browser's timezone database, so DST is respected), connect its meridian at the north pole, an anchor on its meridian at 78°N (just below the date pills, so the line is straight beside them), each of its cities, an anchor on its meridian at 57°S (below all land, so the line is straight where the knob sits), and its meridian at the south pole. Between neighbouring points it eases along half a cosine wave, so the line runs parallel to the meridians at every city, anchor and pole, and never leaves the range of its points.
 3. **Delete meridian lines** touched by any city line (including a zone's own, which its city line replaces), or within `NEAR = 3°` of any city (otherwise the line lingers beside the dot).
-4. What remains (city lines and surviving meridian lines) are the boundaries. They never cross. At the top of each hour the midnight line is exactly one boundary. Between hours it blends the two neighbouring boundaries by time, so its shape changes as it travels and only bends where a city's boundary is passing.
+4. What remains (city lines and surviving meridian lines) are the boundaries. They never cross. At the top of each hour the midnight line is exactly one boundary. Between hours, at each latitude the line's x follows a monotone cubic (Fritsch-Carlson) through the four nearest boundaries over time (padded with copies shifted by a day, for wrap-around). It passes exactly through each boundary at its hour, never overshoots the two boundaries either side, and its speed changes smoothly instead of jumping at the hour. Its shape changes as it travels and only bends where a city's boundary is passing.
 5. The polyline is sampled at every degree of latitude plus each city's latitude, and drawn as an SVG `<polyline>` (`vector-effect: non-scaling-stroke`) plus copies shifted by ±360 for where it runs off an edge. It is drawn behind the city labels, with the knob above it.
 
 Everything is recomputed on every render (about 0.3 ms), because offsets change with DST and with the date being shown.
@@ -58,5 +58,5 @@ A collapsed `<details>` titled "See something wrong?" with four short paragraphs
 Sample every few minutes over several days and assert:
 - Every city is on the correct side of the line (later date to the right, equal allowed only at its exact 12:00 AM).
 - The line's step between samples is tiny beyond the meridian's own motion, including across 12:00 UTC.
-- Neighbouring boundaries never cross, and below 57°S the line's x equals the knob's x.
+- Neighbouring boundaries never cross, and below 57°S the line's x equals the knob's x, and above 78°N it equals the meridian.
 - Behaviour: editing a city time or date updates everything, dragging 100px moves the line 100px, arrow keys move 15 minutes, the grab strip has `touch-action: pan-y`, and no page errors.
