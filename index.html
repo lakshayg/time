@@ -279,7 +279,7 @@ const put = (el, value) => { if (el !== document.activeElement && el.value !== v
 function render() {
   const t = now();
   const s = sun(t);
-  const f = ((12 - (t % DAY) / HOUR) / 24 + 1) % 1;   // where it is midnight, as a fraction of the map width
+  const f = 1 - ((((t % DAY) / HOUR - 12) / 24) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width. At exactly 12:00 UTC it is on the right edge, where the dates change
 
   $("night").setAttribute("points", nightPoints(s));
   $("mid").style.left = $("knob").style.left = f * 100 + "%";
