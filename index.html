@@ -302,8 +302,14 @@ function midnightLine(t, x0) {
 // Update a field unless the person is typing in it.
 const put = (el, value) => { if (el !== document.activeElement && el.value !== value) el.value = value; };
 
-function render() {
-  const t = now();
+// Everything on the page changes by at most a minute's worth, so while live it is redrawn once a minute, when
+// the minute changes. Anything the person does redraws straight away. (The map is the costly part to repaint,
+// especially on phones, so it is not redrawn every second.)
+let drawnMinute = -1;
+function render(force = true) {
+  const t = now(), minute = Math.floor(t / MIN);
+  if (!force && minute === drawnMinute) return;
+  drawnMinute = minute;
   const s = sun(t);
   const f = 1 - ((((t % DAY) / HOUR - 12) / 24) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width. At exactly 12:00 UTC it is on the right edge, where the dates change
 
@@ -320,15 +326,15 @@ function render() {
   }
 
   for (const c of CITIES) {
-    const w = wall(c, t);
     c.pin.classList.toggle("day", isDay(c, s));
-    put(c.time, clock(w));
+    put(c.time, clock(wall(c, t)));
   }
 }
 
 addEventListener("focusout", () => setTimeout(render));   // drop half-typed values once the field is left
+addEventListener("resize", () => render());                       // the date pills hide when there is no room, which depends on the map width
 render();
-setInterval(() => { if (fixed === null) render(); }, 1000);
+setInterval(() => { if (fixed === null) render(false); }, 1000);
 </script>
 </body>
 </html>
