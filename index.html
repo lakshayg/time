@@ -241,19 +241,8 @@ $("grab").onkeydown = e => {                               // the line moves lef
   setTime(Math.round(now() / MIN) * MIN + dir * (e.shiftKey ? HOUR : 15 * MIN));
 };
 
-// The midnight line. Midnight sweeps west across the map, and at the top of each hour it sits exactly on one
-// time zone boundary: the one between clock-hour N-1 and N. We don't have the real boundaries, so we make
-// approximate ones from the cities on the map:
-//   1. a "base line" for every clock offset: a plain meridian, 15 degrees per hour
-//   2. a "real line" for every clock that has cities: a smooth curve from its meridian at the north pole,
-//      through each of its cities, back to its meridian by STRAIGHT_BELOW, and down to the south pole
-//   3. a base line is deleted if any real line touches it (a real line replaces its own base line),
-//      or if it passes within NEAR degrees of any city (the line would linger beside that city's dot)
-// What is left are the boundaries. They never cross, and each city is exactly on its boundary at its 12:00 AM.
-// Between the hours the line blends the two boundaries either side of the current moment, so its shape changes
-// as it travels. It only bends where a city's boundary is passing.
 // A smooth curve x(y) through the points that stays between them (a monotone cubic, Fritsch-Carlson). It
-// passes through every point, never overshoots, and flattens at any peak, so the real lines bend gently round a city.
+// passes through every point, never overshoots, and flattens at any peak, so the city lines bend gently round a city.
 function smoothThrough(pts) {
   const n = pts.length, h = [], slope = [], m = [];
   for (let i = 0; i < n - 1; i++) { h[i] = pts[i + 1][0] - pts[i][0]; slope[i] = (pts[i + 1][1] - pts[i][1]) / h[i]; }
@@ -271,19 +260,31 @@ function smoothThrough(pts) {
   };
 }
 
-const NEAR = 3;
-const STRAIGHT_BELOW = 90 + 57;                                          // 57 degrees south, below all land on the map: the lines are straight from here down, where the drag knob sits                                                          // degrees of longitude
+const NEAR = 3;                                                          // degrees of longitude
+const STRAIGHT_BELOW = 90 + 57;                                          // 57 degrees south, below all land on the map: the lines are straight from here down, where the drag knob sits
+
+// The midnight line. Midnight sweeps west across the map, and at the top of each hour it sits exactly on one
+// time zone boundary: the one between clock-hour N-1 and N. We don't have the real boundaries, so we make
+// approximate ones from the cities on the map:
+//   1. a "meridian line" for every clock offset: a plain meridian, 15 degrees per hour
+//   2. a "city line" for every clock that has cities: a smooth curve from its meridian at the north pole,
+//      through each of its cities, back to its meridian by STRAIGHT_BELOW, and down to the south pole
+//   3. a meridian line is deleted if any city line touches it (a city line replaces its own meridian line),
+//      or if it passes within NEAR degrees of any city (the line would linger beside that city's dot)
+// What is left are the boundaries. They never cross, and each city is exactly on its boundary at its 12:00 AM.
+// Between the hours the line blends the two boundaries either side of the current moment, so its shape changes
+// as it travels. It only bends where a city's boundary is passing.
 function midnightLine(t, x0) {
   const hoursUTC = (t % DAY) / HOUR;
   const now = ((12 - hoursUTC) % 24 + 24) % 24 - 12;                    // the clock offset where it is midnight right now, -12 up to 12
   const meridian = z => 180 + 15 * z;
-  const real = {};                                                       // the cities on each clock offset (hours ahead of UTC, from the timezone database)
-  for (const c of CITIES) (real[zoneOffset(c, t) / HOUR] ||= []).push([90 - c.lat, c.lon + 180]);
-  const lines = Object.entries(real).map(([z, cities]) => {
+  const byOffset = {};                                                   // the cities on each clock offset (hours ahead of UTC, from the timezone database)
+  for (const c of CITIES) (byOffset[zoneOffset(c, t) / HOUR] ||= []).push([90 - c.lat, c.lon + 180]);
+  const lines = Object.entries(byOffset).map(([z, cities]) => {            // the city lines
     const pts = [[0, meridian(z)], ...cities.sort((p, q) => p[0] - q[0]), [STRAIGHT_BELOW, meridian(z)], [180, meridian(z)]];
     return { z: +z, pts, at: smoothThrough(pts) };
   });
-  for (let z = -12; z <= 12; z++) {                                      // the base lines that survive
+  for (let z = -12; z <= 12; z++) {                                      // the meridian lines that survive
     const touched = lines.some(l => Math.min(...l.pts.map(p => p[1])) <= meridian(z) && meridian(z) <= Math.max(...l.pts.map(p => p[1])));
     const close = CITIES.some(c => Math.abs(c.lon + 180 - meridian(z)) < NEAR);
     if (!touched && !close) lines.push({ z, pts: [[0, meridian(z)], [180, meridian(z)]], at: () => meridian(z) });
