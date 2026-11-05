@@ -90,6 +90,7 @@
     </div>
     <svg id="over" viewBox="0 0 360 180" preserveAspectRatio="none" aria-hidden="true">
       <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
     </svg>
     <div id="knob" aria-hidden="true">‹ ›</div>
   </div>
@@ -240,33 +241,20 @@ $("grab").onkeydown = e => {                               // the line moves lef
   setTime(Math.round(now() / MIN) * MIN + dir * (e.shiftKey ? HOUR : 15 * MIN));
 };
 
-// The midnight line. It follows the meridian where midnight falls (x0), but bends around any city whose
-// local date puts it on the other side, so the line never contradicts the times shown on the map.
-// Each city pulls the line towards the side it needs, strongest at its own latitude (a trapezoid: full pull
-// within FLAT degrees, fading to nothing at BUMP). Where pulls overlap, the line follows the strongest.
-const MARGIN = 2.5, FLAT = 4, BUMP = 12;   // degrees: clearance from a city's dot; where the pull is full; where it fades out
+// The midnight line. Every city has its own midnight line: where it would be midnight if the whole world
+// ran on that city's clock. It passes through the city's dot at the city's 12:00 AM, then keeps moving
+// at 15 degrees an hour, like the true meridian. So a city's line is always the true meridian plus a fixed
+// offset (the city's longitude minus its time zone's centre meridian). The midnight line joins these
+// offsets, city to city, down the map, and is the true meridian at the two poles.
+// Every city is therefore on the right side of the line at all times, and the line's shape never changes
+// during the day. It only slides left, as one piece.
+const wrap360 = d => ((d + 180) % 360 + 360) % 360 - 180;
 function midnightLine(t, x0) {
-  const rightDay = Math.floor((t + 12 * HOUR) / DAY);
-  const pulls = CITIES.map(c => {
-    const w = wall(c, t), x = c.lon + 180;
-    const onRight = Math.floor(Date.UTC(w.year, w.month - 1, w.day) / DAY) >= rightDay;   // later date: right of the line
-    const exact = w.hour === 0 && w.minute === 0;                                          // 12:00 AM: the line goes through the city
-    const need = exact ? x : onRight ? Math.min(x0, x - MARGIN) : Math.max(x0, x + MARGIN);   // where the line has to be at this city's latitude
-    return { y: 90 - c.lat, shift: need - x0 };                                              // so how far it has to move from the meridian
+  const offsets = CITIES.map(c => {
+    const w = wall(c, t), hours = w.hour + w.minute / 60 + w.second / 3600;                  // the city's clock, since midnight
+    return [90 - c.lat, wrap360(c.lon + 180 - 15 * hours - x0)];                              // [y, how far its midnight line is from the true meridian]
   });
-  const fade = d => Math.min(1, Math.max(0, (BUMP - d) / (BUMP - FLAT)));
-  const xAt = y => {
-    let left = 0, right = 0;
-    for (const p of pulls) {
-      const s = p.shift * fade(Math.abs(y - p.y));
-      if (s < 0) left = Math.min(left, s); else right = Math.max(right, s);                  // strongest pull each way
-    }
-    return x0 + left + right;
-  };
-  const ys = new Set([0, 180]);                                                            // where the line can change direction
-  for (const p of pulls) for (const d of [0, FLAT, BUMP]) ys.add(p.y - d).add(p.y + d);
-  for (let y = 0; y <= 180; y += 2) ys.add(y);                                             // plus a few in between, for where pulls meet
-  return [...ys].filter(y => y >= 0 && y <= 180).sort((p, q) => p - q).map(y => xAt(y).toFixed(2) + "," + y.toFixed(2)).join(" ");
+  return [[0, 0], ...offsets.sort((p, q) => p[0] - q[0]), [180, 0]].map(([y, d]) => (x0 + d).toFixed(2) + "," + y.toFixed(2)).join(" ");
 }
 
 // Update a field unless the person is typing in it.
