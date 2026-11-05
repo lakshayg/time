@@ -31,10 +31,8 @@
   .pin { --c: var(--moon); position: absolute; translate: -50% -50%; white-space: nowrap; }
   .pin.day { --c: var(--sun); }
   .pin i { display: block; width: .7em; height: .7em; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .18em color-mix(in srgb, var(--c) 25%, transparent); }
-  .pin span { position: absolute; padding: .2em .45em; border-radius: 4px; background: var(--card); }
-  .pin span { transition: scale .12s ease-out; }
+  .pin span { position: absolute; padding: .2em .45em; border-radius: 4px; background: var(--card); transition: scale .12s ease-out; }
   .pin:hover { z-index: 1; }
-  #over { pointer-events: none; }   /* the midnight line passes behind the city labels */
   .pin:hover span { scale: 1.15; }
   .pin em { display: block; font-style: normal; color: var(--muted); }
   .map input { display: block; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; }
@@ -43,15 +41,17 @@
   .pin input { font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; width: 8ch; border-radius: 3px; }
   .pin input:hover, .pin input:focus { background: color-mix(in srgb, var(--sun) 14%, transparent); }
   .l input { margin-left: auto; text-align: right; }
-  .t input, .b input { text-align: center; }
-  .t input, .b input { margin: 0 auto; }
-  .r span { left: 1.1em; top: 50%; translate: 0 -50%; transform-origin: left; }
-  .l span { right: 1.1em; top: 50%; translate: 0 -50%; transform-origin: right; text-align: right; }
-  .t span { bottom: 1.1em; left: 50%; translate: -50% 0; transform-origin: bottom; text-align: center; }
-  .b span { top: 1.1em; left: 50%; translate: -50% 0; transform-origin: top; text-align: center; }
+  .t input, .b input { margin: 0 auto; text-align: center; }
+  .l span, .r span { top: 50%; translate: 0 -50%; }
+  .t span, .b span { left: 50%; translate: -50% 0; text-align: center; }
+  .r span { left: 1.1em; transform-origin: left; }
+  .l span { right: 1.1em; transform-origin: right; text-align: right; }
+  .t span { bottom: 1.1em; transform-origin: bottom; }
+  .b span { top: 1.1em; transform-origin: top; }
 
   /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
-  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; pointer-events: none; }
+  #mid, #over { pointer-events: none; }   /* the midnight line passes behind the city labels */
+  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; }
   #grab:focus-visible { outline: none; }   /* the strip is tall, so show keyboard focus on the knob instead */
   .map:has(#grab:focus-visible) #knob { outline: 2px solid var(--sun); outline-offset: 2px; }
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
@@ -170,7 +170,7 @@ const setTime = t => { fixed = t; render(); };
 const wall = (c, t) => Object.fromEntries(c.fmt.formatToParts(t).filter(p => p.type !== "literal").map(p => [p.type, +p.value]));
 const zoneOffset = (c, t) => { const w = wall(c, t); return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second) - Math.floor(t / 1000) * 1000; };
 
-// "6:19 pm", "06:19PM", "18:19" and "619p" all work. Returns "HH:MM" (24 h), or null if it isn't a time.
+// "6:19 pm", "06:19PM", "18:19" and "619p" all work. Returns [hour, minute] (24 h), or null if it isn't a time.
 function parseTime(text) {
   const m = /^(\d{1,2})(?:[:.\s]?(\d{2}))?\s*([ap])?\.?m?\.?$/i.exec(text.trim());
   if (!m) return null;
@@ -178,14 +178,13 @@ function parseTime(text) {
   const min = +(m[2] || 0), pm = m[3] && m[3].toLowerCase() === "p";
   if (min > 59 || (m[3] ? h < 1 || h > 12 : h > 23)) return null;
   if (m[3]) h = h % 12 + (pm ? 12 : 0);
-  return two(h) + ":" + two(min);
+  return [h, min];
 }
 const clock = w => two(w.hour % 12 || 12) + ":" + two(w.minute) + (w.hour < 12 ? " AM" : " PM");
 
 // Editing a city's time: pick the moment closest to now that shows that time there,
 // so changing 11:58 PM to 12:10 AM moves forward 12 minutes, not back a day.
-function setCityTime(c, hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
+function setCityTime(c, [h, m]) {
   const t = now(), w = wall(c, t);
   let best = null;
   for (const d of [-1, 0, 1]) {
@@ -209,7 +208,7 @@ for (const c of CITIES) {
   c.pin = document.createElement("div");
   c.pin.className = "pin " + c.label;
   c.pin.style.cssText = `left: ${(c.lon + 180) / 3.6}%; top: ${(90 - c.lat) / 1.8}%`;
-  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><input type="text" inputmode="text" autocomplete="off" spellcheck="false" aria-label="${c.name} time"></span>`;
+  c.pin.innerHTML = `<i></i><span><em>${c.name}</em><input type="text" autocomplete="off" spellcheck="false" aria-label="${c.name} time"></span>`;
   c.time = c.pin.querySelector("input");
   let fresh = false;                                            // keep the select-all from focus when the click's mouseup arrives (Safari undoes it)
   c.time.onfocus = () => { fresh = true; c.time.select(); };
@@ -218,9 +217,10 @@ for (const c of CITIES) {
   c.time.onchange = () => { const t = parseTime(c.time.value); if (t) setCityTime(c, t); };
   $("map").append(c.pin);
 }
-$("dateL").oninput = e => e.target.value && setDate(-12, e.target.value);
-$("dateR").oninput = e => e.target.value && setDate(12, e.target.value);
-for (const id of ["dateL", "dateR"]) $(id).onclick = e => { try { e.target.showPicker(); } catch {} };
+for (const [id, hours] of [["dateL", -12], ["dateR", 12]]) {
+  $(id).oninput = e => e.target.value && setDate(hours, e.target.value);
+  $(id).onclick = e => { try { e.target.showPicker(); } catch {} };
+}
 
 // Dragging the midnight line. Moving it right by a map width goes back 24 hours.
 let drag = null;
@@ -269,19 +269,19 @@ const STRAIGHT_BELOW = 90 + 57;                                          // 57 d
 // Between the hours the line blends the two boundaries either side of the current moment, so its shape changes
 // as it travels. It only bends where a city's boundary is passing.
 function midnightLine(t, x0) {
-  const hoursUTC = (t % DAY) / HOUR;
-  const now = ((12 - hoursUTC) % 24 + 24) % 24 - 12;                    // the clock offset where it is midnight right now, -12 up to 12
+  const now = ((12 - (t % DAY) / HOUR) % 24 + 24) % 24 - 12;                   // the clock offset where it is midnight right now, -12 up to 12
   const meridian = z => 180 + 15 * z;
   const byOffset = {};                                                   // the cities on each clock offset (hours ahead of UTC, from the timezone database)
   for (const c of CITIES) (byOffset[zoneOffset(c, t) / HOUR] ||= []).push([90 - c.lat, c.lon + 180]);
   const lines = Object.entries(byOffset).map(([z, cities]) => {            // the city lines
     const pts = [[0, meridian(z)], [STRAIGHT_ABOVE, meridian(z)], ...cities.sort((p, q) => p[0] - q[0]), [STRAIGHT_BELOW, meridian(z)], [180, meridian(z)]];
-    return { z: +z, pts, at: smoothThrough(pts) };
+    const xs = pts.map(p => p[1]);
+    return { z: +z, lo: Math.min(...xs), hi: Math.max(...xs), at: smoothThrough(pts) };
   });
   for (let z = -12; z <= 12; z++) {                                      // the meridian lines that survive
-    const touched = lines.some(l => Math.min(...l.pts.map(p => p[1])) <= meridian(z) && meridian(z) <= Math.max(...l.pts.map(p => p[1])));
+    const touched = lines.some(l => l.lo <= meridian(z) && meridian(z) <= l.hi);
     const close = CITIES.some(c => Math.abs(c.lon + 180 - meridian(z)) < NEAR);
-    if (!touched && !close) lines.push({ z, pts: [[0, meridian(z)], [180, meridian(z)]], at: () => meridian(z) });
+    if (!touched && !close) lines.push({ z, at: () => meridian(z) });
   }
   lines.sort((p, q) => p.z - q.z);
   const k = Math.max(0, Math.min(lines.length - 2, lines.findIndex(l => l.z > now) - 1));   // the two boundaries either side of "now"
@@ -328,7 +328,7 @@ function render(force = true) {
 }
 
 addEventListener("focusout", () => setTimeout(render));   // drop half-typed values once the field is left
-addEventListener("resize", () => render());                       // the date pills hide when there is no room, which depends on the map width
+addEventListener("resize", () => render());               // the date pills hide when there is no room, which depends on the map width
 render();
 setInterval(() => { if (fixed === null) render(false); }, 1000);
 </script>
