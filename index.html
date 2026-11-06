@@ -68,6 +68,7 @@
   summary { cursor: pointer; font-weight: 600; }
   details p { margin: .6rem 0 0; color: var(--muted); font-size: .92rem; }
   details b { color: var(--ink); }
+  details a { color: var(--moon); }
   @media (prefers-reduced-motion: reduce) { .pin span { transition: none; } }
 </style>
 </head>
@@ -101,6 +102,7 @@
   <p><b>Device clock.</b> Every time and date on this page starts from your device's clock. If it is off by a few minutes, everything shown here is off by the same amount. Turn on automatic date and time in your system settings to fix it.</p>
   <p><b>Timezone database.</b> Each city's daylight-saving rules come from a database built into your browser. If a country changed its rules recently and your browser hasn't caught up, that city can be off by an hour. Updating your browser fixes it.</p>
   <p><b>Midnight line.</b> It is placed by longitude and bends around cities so that each one is on the side matching its date. Away from the cities, real time zone borders differ slightly.</p>
+  <p><b>Still wrong?</b> Please <a href="https://github.com/lakshayg/time/issues">file an issue on GitHub</a>.</p>
 </details>
 
 <script>

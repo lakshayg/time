@@ -64,7 +64,7 @@ It is built from approximate time zone boundaries (`midnightLine` in `index.html
 Everything is recomputed on every render (about 0.3 ms), because offsets change with DST and with the date being shown.
 
 ## Help text
-A collapsed `<details>` titled "See something wrong?" with three short paragraphs: device clock (everything starts from it), timezone database (built into the browser, may be out of date), and the midnight line (placed by longitude and bent around cities, so real borders differ slightly).
+A collapsed `<details>` titled "See something wrong?" with four short paragraphs: device clock (everything starts from it), timezone database (built into the browser, may be out of date), and the midnight line (placed by longitude and bent around cities, so real borders differ slightly), and a link to file an issue on the GitHub repo.
 
 ## Checks worth keeping
 Sample every few minutes over several days and assert:
