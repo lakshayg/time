@@ -6,8 +6,20 @@ Static page: no framework, no bundler, no dependencies at runtime. Light mode on
 | File | What |
 |---|---|
 | `index.html` | The whole app, edited by hand: HTML, CSS and JS in one file. |
-| `land.svg` | The map. Generated, and loaded with `<img src="land.svg" alt="">`. Must sit next to `index.html`. |
-| `gen.mjs`, `Makefile` | Build the map: `make` runs `npm i world-atlas@2 topojson-client@3`, then `node gen.mjs > land.svg`. Only the map needs a build step. |
+| `land.svg` | The map. Generated and not committed (it is in `.gitignore`), and loaded with `<img src="land.svg" alt="">`. Must sit next to `index.html`. |
+| `gen.mjs` | Generates the map as SVG on stdout. |
+| `package.json`, `package-lock.json` | Pin the two build-time packages (`world-atlas`, `topojson-client`) and define `npm run build`. Only the map needs a build step. |
+| `.github/workflows/pages.yml` | Builds the map and deploys the site to GitHub Pages on every push to `main`. |
+
+## Build and run
+```sh
+npm ci            # install the two build-time packages (once)
+npm run build     # writes land.svg
+```
+Then open `index.html` in a browser, or serve the folder (`python3 -m http.server`). Without `land.svg` the page works but shows no map. Rebuild only when `gen.mjs` changes.
+
+## Deploy
+Pushing to `main` runs the workflow, which installs the packages, builds `land.svg`, removes `node_modules`, and publishes the repository root with GitHub Pages. One-time setup in the repo's Settings → Pages: set Source to "GitHub Actions", and set the custom domain there (a `CNAME` file is ignored by Actions deploys).
 
 ## Principles
 - Simple, lightweight, intentional. Native browser features only (`Intl`, `<input type="date">`, pointer events, SVG). No redundancy.
