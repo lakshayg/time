@@ -1,9 +1,11 @@
 {
+  "name": "world-clock",
   "private": true,
+  "description": "An interactive world clock on a day/night map.",
   "scripts": {
     "build": "node gen.mjs > land.svg"
   },
-  "dependencies": {
+  "devDependencies": {
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   }
