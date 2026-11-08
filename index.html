@@ -51,11 +51,11 @@
 
   /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
   #mid, #over { pointer-events: none; }   /* the midnight line passes behind the city labels */
-  #mid { position: absolute; top: 0; bottom: 0; left: var(--x); width: 1.5px; translate: -50%; }
+  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; }
   #grab:focus-visible { outline: none; }   /* the strip is tall, so show keyboard focus on the knob instead */
   .map:has(#grab:focus-visible) #knob { outline: 2px solid var(--sun); outline-offset: 2px; }
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
-  #knob { position: absolute; left: var(--x); bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
+  #knob { position: absolute; bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
   /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
   .date { position: absolute; top: .4em; padding: .2em .5em; border-radius: 4px; background: var(--card); font-weight: 600; white-space: nowrap; pointer-events: auto; cursor: pointer; }
   .date:hover { background: #fff; }
@@ -63,7 +63,7 @@
   .date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   /* A ruler along the top and bottom edge, starting at the midnight line: a tick every hour, and the hour of the day beside it.
      Along the edges the midnight line runs straight on the meridians, so the ruler agrees with the clocks there.
-     Each label draws its own tick. --x is where the midnight line is, set in render(). */
+     Each label draws its own tick. --x is where the midnight line is, set on #hours in render(). */
   #hours span { position: absolute; left: mod(var(--x) + var(--i) * 100% / 24, 100%); translate: -50% 0; font-size: .7rem; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; pointer-events: none; }
   #hours span::before { content: ''; position: absolute; left: calc(50% - .5px); width: 1px; height: 6px; background: var(--ink); }
   #hours .top { top: 7px; }
@@ -147,7 +147,7 @@ const CITIES = [
 
 const RAD = Math.PI / 180;
 const $ = id => document.getElementById(id);
-const map = $("map"), grab = $("grab");
+const map = $("map"), grab = $("grab"), knob = $("knob");
 const HOUR = 36e5, DAY = 864e5, MIN = 6e4;
 
 // Where the sun is directly overhead: declination (radians) and longitude (degrees).
@@ -324,24 +324,27 @@ function render(force = true) {
   const t = now(), minute = Math.floor(t / MIN);
   if (!force && minute === drawnMinute) return;
   drawnMinute = minute;
-  $("hint").textContent = fixed === null ? liveHint : "Paused. Reload to go live again.";   // once anything is edited the clocks stop following the device
   const s = sun(t);
   const f = 1 - ((t / DAY - .5) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width. At exactly 12:00 UTC it is on the right edge, where the dates change
 
-  $("night").setAttribute("points", nightPoints(s));
-  $("line").setAttribute("points", midnightLine(t, f * 360));
-  map.style.setProperty("--x", f * 100 + "%");   // the line, the knob and the ruler all follow it
-  grab.setAttribute("aria-valuenow", Math.round(f * 100));
-
+  // The dates come first: they are the only thing measured (a pill hides when there is no room beside the line), and
+  // measuring after the rest has been changed would make the browser lay the page out in the middle of a render.
   for (const [side, hours, room] of [["L", -12, f], ["R", 12, 1 - f]]) {   // the dates just before and just after midnight
     const day = t + hours * HOUR;
     put($("date" + side), new Date(day).toISOString().slice(0, 10));
     $("text" + side).textContent = dateFmt.format(day);
     const pill = $("pill" + side);
-    const noRoom = room * map.clientWidth < pill.offsetWidth + 16;   // no room beside the line
+    const noRoom = room * map.clientWidth < pill.offsetWidth + 16;
     pill.style.visibility = noRoom ? "hidden" : "";
     $("hours").classList.toggle("no" + side, noRoom);
   }
+
+  $("hint").textContent = fixed === null ? liveHint : "Paused. Reload to go live again.";   // once anything is edited the clocks stop following the device
+  $("night").setAttribute("points", nightPoints(s));
+  $("line").setAttribute("points", midnightLine(t, f * 360));
+  $("mid").style.left = knob.style.left = f * 100 + "%";
+  $("hours").style.setProperty("--x", f * 100 + "%");   // set on the ruler alone: a custom property set higher up makes the browser recheck the styles of everything below it, pins included
+  grab.setAttribute("aria-valuenow", Math.round(f * 100));
 
   for (const c of CITIES) {
     c.pin.classList.toggle("day", isDay(c, s));
