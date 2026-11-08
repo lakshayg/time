@@ -48,7 +48,7 @@ Pushing to `main` runs the workflow, which installs the packages, builds `land.s
 - Dates: the left pill is the date just before midnight, the right pill the date just after (the date at `t - 12h` and at `t + 12h`). There is no international date line, no UTC label, and no separate time card. The pills sit at the top edge, beside the straight part of the line. A pill hides when there is no room beside the line, and the ruler hours it was covering come back (see the ruler below).
 
 ## Dragging versus scrolling
-- Three things take a drag, all marked `.drag` (`touch-action: pan-y`, `cursor: ew-resize`): a 25px strip centred on the midnight line, and the two ruler bands (36px tall along the top and bottom edge). Nothing else on the map takes the pointer, so a horizontal drag on one of them moves time, but vertical scrolling and scrolling the map elsewhere still work. The date pills and the city times sit above them and keep their own clicks. There is no separate handle: the line and the rulers are the handles. The hint beside the title mentions only the rulers, and the line works as a bonus.
+- Three things take a drag, all marked `.drag` (`touch-action: none`, `user-select: none`, `-webkit-touch-callout: none`, `cursor: ew-resize`): a 25px strip centred on the midnight line, and the two ruler bands (36px tall along the top and bottom edge). Nothing else on the map takes the pointer, so a drag that starts on one of them moves time, and scrolling the page or the map from anywhere else still works. (A vertical swipe that starts on one of them does not scroll the page.) The date pills and the city times sit above them and keep their own clicks. There is no separate handle: the line and the rulers are the handles. The hint beside the title mentions only the rulers, and the line works as a bonus.
 - The top ruler is the one slider for assistive tech (`role="slider"`, `tabindex="0"`); the others are the same control for the pointer only. Left/Right move 15 minutes (Shift: 1 hour). Keyboard focus shows as a ring around the top ruler.
 
 ## The midnight line
@@ -72,6 +72,9 @@ Measured in headless Chrome, one `render()` per frame, as in a drag: about 5.5 m
 - In `render()` the date pills come first. They are the only thing measured (`clientWidth`, `offsetWidth`), and measuring after other changes forces the browser to lay the page out in the middle of the render.
 - Tried and left alone: `contain` on the ruler (no change), and a lighter label halo (saves about 0.8 ms a frame but changes how the labels look). `pointermove` is already once per frame in browsers, so dragging needs no `requestAnimationFrame` throttle.
 
+## iOS Safari
+The first version used `touch-action: pan-y` and did not stop selection. On iOS Safari the drag was janky unless the map had first been selected with a long press: Safari could not tell a scroll from a long press (loupe, selection) from a drag, and dropped the drag part way with a `pointercancel`. The drag areas now have `touch-action: none` (no native scroll to compete with) and no text selection or callout. `user-select: none` is on the drag areas only, not the map, because it can stop text fields working on iOS and the city times are editable.
+
 ## Help text
 A collapsed `<details>` titled "See something wrong?" with four short paragraphs: device clock (everything starts from it), timezone database (built into the browser, may be out of date), the midnight line (placed by longitude and bent around cities, so real borders differ slightly), and a link to file an issue on the GitHub repo.
 
@@ -80,4 +83,4 @@ Sample every few minutes over several days and assert:
 - Every city is on the correct side of the line (later date to the right, equal allowed only at its exact 12:00 AM).
 - The line's step between samples is tiny beyond the meridian's own motion, including across 12:00 UTC.
 - Neighbouring boundaries never cross, and below 57°S and above 84°N the line is straight along its meridian, so both rulers agree with the clocks at the edges, and every ruler tick is a whole number of hours from the midnight line (within a pixel or two of rounding).
-- Behaviour: editing a city time or date updates everything, dragging the line or either ruler 100px moves the line 100px, dragging anywhere else on the map does nothing, arrow keys move 15 minutes, the three drag areas have `touch-action: pan-y`, and no page errors.
+- Behaviour: editing a city time or date updates everything, dragging the line or either ruler 100px moves the line 100px, dragging anywhere else on the map does nothing, arrow keys move 15 minutes, the three drag areas have `touch-action: none`, and no page errors.

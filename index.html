@@ -50,10 +50,11 @@
   .b span { top: 1.1em; transform-origin: top; }
 
   /* The time is changed by dragging the midnight line or a ruler (the two bands along the top and bottom edge). Nothing else on the map takes
-     the pointer, and these only take horizontal drags, so the rest of the map still scrolls on touch screens. */
+     the pointer, so the rest of the map still scrolls on touch screens. These take every drag that starts on them (touch-action: none), and are not text:
+     with pan-y and selectable text under the finger, iOS Safari hesitated between a scroll, a long press and a drag, and dropped the drag half way. */
   #mid, #over { pointer-events: none; }   /* the midnight line itself passes behind the city labels, so its handle is a strip around it */
   #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; }
-  .drag { position: absolute; touch-action: pan-y; cursor: ew-resize; }
+  .drag { position: absolute; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: ew-resize; }
   #mid .drag { inset: 0 -12px; pointer-events: auto; }
   .ruler { top: 0; left: 0; right: 0; height: 36px; }
   .ruler.bottom { top: auto; bottom: 0; }
