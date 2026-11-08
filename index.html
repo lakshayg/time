@@ -49,13 +49,15 @@
   .t span { bottom: 1.1em; transform-origin: bottom; }
   .b span { top: 1.1em; transform-origin: top; }
 
-  /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
-  #mid, #over { pointer-events: none; }   /* the midnight line passes behind the city labels */
+  /* The time is changed by dragging the midnight line or a ruler (the two bands along the top and bottom edge). Nothing else on the map takes
+     the pointer, and these only take horizontal drags, so the rest of the map still scrolls on touch screens. */
+  #mid, #over { pointer-events: none; }   /* the midnight line itself passes behind the city labels, so its handle is a strip around it */
   #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; }
-  #grab:focus-visible { outline: none; }   /* the strip is tall, so show keyboard focus on the knob instead */
-  .map:has(#grab:focus-visible) #knob { outline: 2px solid var(--sun); outline-offset: 2px; }
-  #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
-  #knob { position: absolute; bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
+  .drag { position: absolute; touch-action: pan-y; cursor: ew-resize; }
+  #mid .drag { inset: 0 -12px; pointer-events: auto; }
+  .ruler { top: 0; left: 0; right: 0; height: 36px; }
+  .ruler.bottom { top: auto; bottom: 0; }
+  .ruler:focus-visible { outline-offset: -2px; }
   /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
   .date { position: absolute; top: .4em; padding: .2em .5em; border-radius: 4px; background: var(--card); font-weight: 600; white-space: nowrap; pointer-events: auto; cursor: pointer; }
   .date:hover { background: #fff; }
@@ -88,7 +90,7 @@
 <body>
 <header>
   <h1>World clock</h1>
-  <p class="hint" id="hint">Drag the midnight line, or edit any time or date.</p>
+  <p class="hint" id="hint">Drag a ruler, or edit any time or date.</p>
 </header>
 
 <div class="scroll">
@@ -97,8 +99,10 @@
     <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the current day and night regions">
       <polygon id="night" fill="#182c60" fill-opacity=".3"/>
     </svg>
+    <div class="drag ruler" id="grab" role="slider" tabindex="0" aria-label="Time. Drag either ruler, or use the arrow keys, to change it." aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="drag ruler bottom" aria-hidden="true"></div>
     <div id="mid">
-      <div id="grab" role="slider" tabindex="0" aria-label="Midnight line. Drag it, or use the arrow keys, to change the time." aria-valuemin="0" aria-valuemax="100"></div>
+      <div class="drag" aria-hidden="true"></div>
       <label class="date" id="pillL"><span id="textL"></span><input id="dateL" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just before midnight, opens a calendar"></label>
       <label class="date" id="pillR"><span id="textR"></span><input id="dateR" type="date" min="1970-01-01" max="2100-12-31" aria-label="Date just after midnight, opens a calendar"></label>
     </div>
@@ -107,7 +111,6 @@
       <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
     </svg>
     <div id="hours"></div>
-    <div id="knob" aria-hidden="true">‹ ›</div>
   </div>
 </div>
 
@@ -147,7 +150,7 @@ const CITIES = [
 
 const RAD = Math.PI / 180;
 const $ = id => document.getElementById(id);
-const map = $("map"), grab = $("grab"), knob = $("knob");
+const map = $("map"), grab = $("grab");
 const HOUR = 36e5, DAY = 864e5, MIN = 6e4;
 
 // Where the sun is directly overhead: declination (radians) and longitude (degrees).
@@ -241,18 +244,20 @@ for (const [id, hours] of [["dateL", -12], ["dateR", 12]]) {
   $(id).onclick = e => { try { e.target.showPicker(); } catch {} };
 }
 
-// Dragging the midnight line. Moving it right by a map width goes back 24 hours.
+// Dragging the midnight line or a ruler, top or bottom, moves the line and the rulers together. Moving them right by a map width goes back 24 hours.
 let drag = null;
-grab.onpointerdown = e => {
-  e.preventDefault();
-  grab.focus({ focusVisible: false });   // pointer focus needs no ring
-  grab.setPointerCapture(e.pointerId);
-  drag = { x: e.clientX, t: now() };
-};
-grab.onpointermove = e => {
-  if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / map.clientWidth * DAY) / MIN) * MIN);
-};
-grab.onpointerup = grab.onpointercancel = () => { drag = null; };
+for (const el of map.querySelectorAll(".drag")) {
+  el.onpointerdown = e => {
+    e.preventDefault();
+    grab.focus({ focusVisible: false });   // pointer focus needs no ring. Each of them hands over to the one that takes the keys
+    el.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, t: now() };
+  };
+  el.onpointermove = e => {
+    if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / map.clientWidth * DAY) / MIN) * MIN);
+  };
+  el.onpointerup = el.onpointercancel = () => { drag = null; };
+}
 grab.onkeydown = e => {                               // the line moves left as time moves forward
   const dir = { ArrowLeft: 1, ArrowRight: -1 }[e.key];
   if (!dir) return;
@@ -274,7 +279,7 @@ function smoothThrough(pts) {
 
 const NEAR = 3;                                                          // degrees of longitude
 const STRAIGHT_ABOVE = 6;                                                // 84 degrees north, level with the date pills: the lines are straight from here up, so the dates sit beside a straight line
-const STRAIGHT_BELOW = 90 + 57;                                          // 57 degrees south, below all land on the map: the lines are straight from here down, where the drag knob sits
+const STRAIGHT_BELOW = 90 + 57;                                          // 57 degrees south, below all land on the map: the lines are straight from here down, where the bottom ruler sits
 
 // The midnight line. Midnight sweeps west across the map, and at the top of each hour it sits exactly on one
 // time zone boundary: the one between clock-hour N-1 and N. We don't have the real boundaries, so we make
@@ -342,7 +347,7 @@ function render(force = true) {
   $("hint").textContent = fixed === null ? liveHint : "Paused. Reload to go live again.";   // once anything is edited the clocks stop following the device
   $("night").setAttribute("points", nightPoints(s));
   $("line").setAttribute("points", midnightLine(t, f * 360));
-  $("mid").style.left = knob.style.left = f * 100 + "%";
+  $("mid").style.left = f * 100 + "%";
   $("hours").style.setProperty("--x", f * 100 + "%");   // set on the ruler alone: a custom property set higher up makes the browser recheck the styles of everything below it, pins included
   grab.setAttribute("aria-valuenow", Math.round(f * 100));
 
