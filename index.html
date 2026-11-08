@@ -57,10 +57,23 @@
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
   #knob { position: absolute; bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
   /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
-  .date { position: absolute; top: .7em; padding: .2em .5em; border-radius: 4px; background: var(--card); font-weight: 600; white-space: nowrap; pointer-events: auto; cursor: pointer; }
+  .date { position: absolute; top: .4em; padding: .2em .5em; border-radius: 4px; background: var(--card); font-weight: 600; white-space: nowrap; pointer-events: auto; cursor: pointer; }
   .date:hover { background: #fff; }
   .date:focus-within { outline: 2px solid var(--sun); }
   .date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  /* A ruler along the top and bottom edge, starting at the midnight line: a tick every hour, and the hour of the day written along the bottom.
+     Along the edges the midnight line runs straight on the meridians, so the ruler agrees with the clocks there. */
+  .map { --x: 0%; }   /* where the midnight line is, set in render(). The ruler's tile offset is a percentage of (width - tile), hence 24/23. */
+  .ruler { position: absolute; left: 0; right: 0; height: 6px; pointer-events: none;
+    background: linear-gradient(90deg, var(--ink) 1px, transparent 1px) calc(var(--x) * 24 / 23) 0 / calc(100% / 24) 100% repeat-x; }
+  .ruler.bottom { bottom: 0; }
+  #hours span { position: absolute; bottom: 7px; left: mod(var(--x) + var(--i) * 100% / 24, 100%); translate: -50% 0; font-size: .7rem; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; pointer-events: none; }
+  #hours span.top { bottom: auto; top: 7px; }
+  #hours span.top::before { content: ''; position: absolute; top: -7px; left: calc(50% - .5px); width: 1px; height: 6px; background: var(--ink); }   /* the top ticks come with their labels */
+  /* Round midnight the top is left to the dates: the hours there are hidden (g), or only their label is (e), until a date has no room and goes. L, M and R: which dates they sit beside. */
+  #hours span.top.g { visibility: hidden; }
+  #hours span.top.e { color: transparent; text-shadow: none; }
+  #hours.noL span.top.L, #hours.noR span.top.R, #hours.noL.noR span.top.M { visibility: visible; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
   #pillL { right: .4em; }
   #pillR { left: .4em; }
 
@@ -93,6 +106,8 @@
       <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
     </svg>
+    <div class="ruler bottom"></div>
+    <div id="hours"></div>
     <div id="knob" aria-hidden="true">‹ ›</div>
   </div>
 </div>
@@ -318,13 +333,16 @@ function render(force = true) {
   $("night").setAttribute("points", nightPoints(s));
   $("mid").style.left = $("knob").style.left = f * 100 + "%";
   $("line").setAttribute("points", midnightLine(t, f * 360));
+  $("map").style.setProperty("--x", f * 100 + "%");
   $("grab").setAttribute("aria-valuenow", Math.round(f * 100));
 
   for (const [side, hours, room] of [["L", -12, f], ["R", 12, 1 - f]]) {   // the dates just before and just after midnight
     put($("date" + side), new Date(t + hours * HOUR).toISOString().slice(0, 10));
     $("text" + side).textContent = dateFmt.format(t + hours * HOUR);
     const pill = $("pill" + side);
-    pill.style.visibility = room * $("map").clientWidth < pill.offsetWidth + 16 ? "hidden" : "";   // no room beside the line
+    const noRoom = room * $("map").clientWidth < pill.offsetWidth + 16;   // no room beside the line
+    pill.style.visibility = noRoom ? "hidden" : "";
+    $("hours").classList.toggle("no" + side, noRoom);
   }
 
   for (const c of CITIES) {
@@ -335,6 +353,16 @@ function render(force = true) {
 
 addEventListener("focusout", () => setTimeout(render));   // drop half-typed values once the field is left
 addEventListener("resize", () => render());               // the date pills hide when there is no room, which depends on the map width
+for (let i = 0; i < 24; i++) {   // the hour of the day at each tick, starting from midnight
+  for (const edge of ["top", "bottom"]) {
+    const k = (i + 2) % 24;   // 0 to 4 for 10p to 2a, the hours around the dates
+    const hour = document.createElement("span");
+    hour.className = edge + (edge === "top" && k < 5 ? " " + (k % 4 ? "g " : "e ") + "LLMRR"[k] : "");
+    hour.textContent = (i % 12 || 12) + (i < 12 ? "a" : "p");
+    hour.style.setProperty("--i", i);
+    $("hours").append(hour);
+  }
+}
 render();
 setInterval(() => { if (fixed === null) render(false); }, 1000);
 </script>
