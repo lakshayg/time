@@ -51,29 +51,29 @@
 
   /* The midnight line is not clickable itself. Only #grab is, so the rest of the map still scrolls on touch screens. */
   #mid, #over { pointer-events: none; }   /* the midnight line passes behind the city labels */
-  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; }
+  #mid { position: absolute; top: 0; bottom: 0; left: var(--x); width: 1.5px; translate: -50%; }
   #grab:focus-visible { outline: none; }   /* the strip is tall, so show keyboard focus on the knob instead */
   .map:has(#grab:focus-visible) #knob { outline: 2px solid var(--sun); outline-offset: 2px; }
   #grab { position: absolute; inset: 0 -12px; pointer-events: auto; touch-action: pan-y; cursor: ew-resize; }
-  #knob { position: absolute; bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
+  #knob { position: absolute; left: var(--x); bottom: 12%; translate: -50% 0; pointer-events: none; padding: .4em .65em; border: 1px solid var(--muted); border-radius: 99px; background: #fff; font: 600 1.15em/1 system-ui, sans-serif; white-space: nowrap; }
   /* The date reads as plain text. A transparent date field on top opens the calendar when clicked. */
   .date { position: absolute; top: .4em; padding: .2em .5em; border-radius: 4px; background: var(--card); font-weight: 600; white-space: nowrap; pointer-events: auto; cursor: pointer; }
   .date:hover { background: #fff; }
   .date:focus-within { outline: 2px solid var(--sun); }
   .date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-  /* A ruler along the top and bottom edge, starting at the midnight line: a tick every hour, and the hour of the day written along the bottom.
-     Along the edges the midnight line runs straight on the meridians, so the ruler agrees with the clocks there. */
-  .map { --x: 0%; }   /* where the midnight line is, set in render(). The ruler's tile offset is a percentage of (width - tile), hence 24/23. */
-  .ruler { position: absolute; left: 0; right: 0; height: 6px; pointer-events: none;
-    background: linear-gradient(90deg, var(--ink) 1px, transparent 1px) calc(var(--x) * 24 / 23) 0 / calc(100% / 24) 100% repeat-x; }
-  .ruler.bottom { bottom: 0; }
-  #hours span { position: absolute; bottom: 7px; left: mod(var(--x) + var(--i) * 100% / 24, 100%); translate: -50% 0; font-size: .7rem; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; pointer-events: none; }
-  #hours span.top { bottom: auto; top: 7px; }
-  #hours span.top::before { content: ''; position: absolute; top: -7px; left: calc(50% - .5px); width: 1px; height: 6px; background: var(--ink); }   /* the top ticks come with their labels */
+  /* A ruler along the top and bottom edge, starting at the midnight line: a tick every hour, and the hour of the day beside it.
+     Along the edges the midnight line runs straight on the meridians, so the ruler agrees with the clocks there.
+     Each label draws its own tick. --x is where the midnight line is, set in render(). */
+  #hours span { position: absolute; left: mod(var(--x) + var(--i) * 100% / 24, 100%); translate: -50% 0; font-size: .7rem; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; pointer-events: none; }
+  #hours span::before { content: ''; position: absolute; left: calc(50% - .5px); width: 1px; height: 6px; background: var(--ink); }
+  #hours .top { top: 7px; }
+  #hours .bottom { bottom: 7px; }
+  .top::before { top: -7px; }
+  .bottom::before { bottom: -7px; }
   /* Round midnight the top is left to the dates: the hours there are hidden (g), or only their label is (e), until a date has no room and goes. L, M and R: which dates they sit beside. */
-  #hours span.top.g { visibility: hidden; }
-  #hours span.top.e { color: transparent; text-shadow: none; }
-  #hours.noL span.top.L, #hours.noR span.top.R, #hours.noL.noR span.top.M { visibility: visible; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+  #hours .top.g { visibility: hidden; }
+  #hours .top.e { color: transparent; text-shadow: none; }
+  #hours.noL .top.L, #hours.noR .top.R, #hours.noL.noR .top.M { visibility: visible; color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
   #pillL { right: .4em; }
   #pillR { left: .4em; }
 
@@ -106,7 +106,6 @@
       <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
     </svg>
-    <div class="ruler bottom"></div>
     <div id="hours"></div>
     <div id="knob" aria-hidden="true">‹ ›</div>
   </div>
@@ -148,18 +147,18 @@ const CITIES = [
 
 const RAD = Math.PI / 180;
 const $ = id => document.getElementById(id);
-const HOUR = 36e5;
+const map = $("map"), grab = $("grab");
+const HOUR = 36e5, DAY = 864e5, MIN = 6e4;
 
 // Where the sun is directly overhead: declination (radians) and longitude (degrees).
 // Uses the standard approximation for declination and the equation of time.
 function sun(t) {
-  const d = new Date(t);
-  const n = (t - Date.UTC(d.getUTCFullYear(), 0, 0)) / 864e5;        // day of year
+  const n = (t - Date.UTC(new Date(t).getUTCFullYear(), 0, 0)) / DAY;        // day of year
   const B = (n - 81) * 2 * Math.PI / 365;
   const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);  // minutes
   return {
     dec: -23.44 * RAD * Math.cos((n + 10) * 2 * Math.PI / 365),
-    lon: -15 * ((t % 864e5) / HOUR - 12 + eot / 60),
+    lon: -15 * ((t % DAY) / HOUR - 12 + eot / 60),
   };
 }
 
@@ -179,7 +178,6 @@ function nightPoints(s) {
 }
 
 const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-const DAY = 864e5, MIN = 6e4;
 const two = n => String(n).padStart(2, "0");
 
 // The moment being shown. null means live; otherwise it stays put until the page is reloaded.
@@ -236,7 +234,7 @@ for (const c of CITIES) {
   c.time.onmouseup = e => { if (fresh) e.preventDefault(); fresh = false; };
   c.time.onkeydown = e => { if (e.key === "Enter") c.time.blur(); };
   c.time.onchange = () => { const t = parseTime(c.time.value); if (t) setCityTime(c, t); };
-  $("map").append(c.pin);
+  map.append(c.pin);
 }
 for (const [id, hours] of [["dateL", -12], ["dateR", 12]]) {
   $(id).oninput = e => e.target.value && setDate(hours, e.target.value);
@@ -245,17 +243,17 @@ for (const [id, hours] of [["dateL", -12], ["dateR", 12]]) {
 
 // Dragging the midnight line. Moving it right by a map width goes back 24 hours.
 let drag = null;
-$("grab").onpointerdown = e => {
+grab.onpointerdown = e => {
   e.preventDefault();
-  $("grab").focus({ focusVisible: false });   // pointer focus needs no ring
-  $("grab").setPointerCapture(e.pointerId);
+  grab.focus({ focusVisible: false });   // pointer focus needs no ring
+  grab.setPointerCapture(e.pointerId);
   drag = { x: e.clientX, t: now() };
 };
-$("grab").onpointermove = e => {
-  if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / $("map").clientWidth * DAY) / MIN) * MIN);
+grab.onpointermove = e => {
+  if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / map.clientWidth * DAY) / MIN) * MIN);
 };
-$("grab").onpointerup = $("grab").onpointercancel = () => { drag = null; };
-$("grab").onkeydown = e => {                               // the line moves left as time moves forward
+grab.onpointerup = grab.onpointercancel = () => { drag = null; };
+grab.onkeydown = e => {                               // the line moves left as time moves forward
   const dir = { ArrowLeft: 1, ArrowRight: -1 }[e.key];
   if (!dir) return;
   e.preventDefault();
@@ -275,7 +273,7 @@ function smoothThrough(pts) {
 }
 
 const NEAR = 3;                                                          // degrees of longitude
-const STRAIGHT_ABOVE = 12;                                               // 78 degrees north, just below the date pills: the lines are straight from here up, so the dates sit beside a straight line
+const STRAIGHT_ABOVE = 6;                                                // 84 degrees north, level with the date pills: the lines are straight from here up, so the dates sit beside a straight line
 const STRAIGHT_BELOW = 90 + 57;                                          // 57 degrees south, below all land on the map: the lines are straight from here down, where the drag knob sits
 
 // The midnight line. Midnight sweeps west across the map, and at the top of each hour it sits exactly on one
@@ -283,7 +281,7 @@ const STRAIGHT_BELOW = 90 + 57;                                          // 57 d
 // approximate ones from the cities on the map:
 //   1. a "meridian line" for every clock offset: a plain meridian, 15 degrees per hour
 //   2. a "city line" for every clock that has cities: a smooth curve from its meridian at the north pole,
-//      down to STRAIGHT_ABOVE (just below the date pills), through each of its cities, back to its meridian by STRAIGHT_BELOW, and down to the south pole
+//      down to STRAIGHT_ABOVE (level with the date pills), through each of its cities, back to its meridian by STRAIGHT_BELOW, and down to the south pole
 //   3. a meridian line is deleted if any city line touches it (a city line replaces its own meridian line),
 //      or if it passes within NEAR degrees of any city (the line would linger beside that city's dot)
 // What is left are the boundaries. They never cross, and each city is exactly on its boundary at its 12:00 AM.
@@ -328,19 +326,19 @@ function render(force = true) {
   drawnMinute = minute;
   $("hint").textContent = fixed === null ? liveHint : "Paused. Reload to go live again.";   // once anything is edited the clocks stop following the device
   const s = sun(t);
-  const f = 1 - ((((t % DAY) / HOUR - 12) / 24) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width. At exactly 12:00 UTC it is on the right edge, where the dates change
+  const f = 1 - ((t / DAY - .5) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width. At exactly 12:00 UTC it is on the right edge, where the dates change
 
   $("night").setAttribute("points", nightPoints(s));
-  $("mid").style.left = $("knob").style.left = f * 100 + "%";
   $("line").setAttribute("points", midnightLine(t, f * 360));
-  $("map").style.setProperty("--x", f * 100 + "%");
-  $("grab").setAttribute("aria-valuenow", Math.round(f * 100));
+  map.style.setProperty("--x", f * 100 + "%");   // the line, the knob and the ruler all follow it
+  grab.setAttribute("aria-valuenow", Math.round(f * 100));
 
   for (const [side, hours, room] of [["L", -12, f], ["R", 12, 1 - f]]) {   // the dates just before and just after midnight
-    put($("date" + side), new Date(t + hours * HOUR).toISOString().slice(0, 10));
-    $("text" + side).textContent = dateFmt.format(t + hours * HOUR);
+    const day = t + hours * HOUR;
+    put($("date" + side), new Date(day).toISOString().slice(0, 10));
+    $("text" + side).textContent = dateFmt.format(day);
     const pill = $("pill" + side);
-    const noRoom = room * $("map").clientWidth < pill.offsetWidth + 16;   // no room beside the line
+    const noRoom = room * map.clientWidth < pill.offsetWidth + 16;   // no room beside the line
     pill.style.visibility = noRoom ? "hidden" : "";
     $("hours").classList.toggle("no" + side, noRoom);
   }
