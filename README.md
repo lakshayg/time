@@ -28,7 +28,7 @@ Pushing to `main` runs the workflow, which installs the packages, builds `land.s
 
 ## The map
 - One coordinate space everywhere: `x = longitude + 180`, `y = 90 - latitude`, `viewBox="0 0 360 180"`, `preserveAspectRatio="none"`. The map, night polygon, midnight line and pins (positioned by percentage) all line up.
-- `gen.mjs`: Natural Earth land 1:110m from the `world-atlas` package. Antarctica dropped, longitudes unwrapped across the antimeridian with copies shifted by ±360 (otherwise coastlines draw horizontal strips), 0.1° precision, a faint grid every 30°. The file header explains how to change the source.
+- `gen.mjs`: Natural Earth land 1:110m from the `world-atlas` package. Antarctica dropped, longitudes unwrapped across the antimeridian with copies shifted by ±360 (otherwise coastlines draw horizontal strips), 0.1° precision, a faint grid every 30°. The file is the biggest download, so it is written in whole tenths of a degree (viewBox `0 0 3600 1800`), each point as its step from the previous one: 62.6 KB became 31 KB, and 22 KB gzipped became 8.5 KB, with the same picture. The file header explains how to change the source.
 - The map has `min-width: 700px` and scrolls horizontally on narrow screens.
 
 ## Cities
