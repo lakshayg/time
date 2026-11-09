@@ -29,7 +29,7 @@ Pushing to `main` runs the workflow, which installs the packages, builds `land.s
 ## The map
 - One coordinate space everywhere: `x = longitude + 180`, `y = 90 - latitude`, `viewBox="0 0 360 180"`, `preserveAspectRatio="none"`. The map, night polygon, midnight line and pins (positioned by percentage) all line up.
 - `gen.mjs`: Natural Earth land 1:110m from the `world-atlas` package. Antarctica dropped, longitudes unwrapped across the antimeridian with copies shifted by ±360 (otherwise coastlines draw horizontal strips), 0.1° precision, a faint grid every 30°. The file is the biggest download, so it is written in whole tenths of a degree (viewBox `0 0 3600 1800`), each point as its step from the previous one: 62.6 KB became 31 KB, and 22 KB gzipped became 8.5 KB, with the same picture. The file header explains how to change the source.
-- The map has `min-width: 700px` and scrolls horizontally on narrow screens.
+- The map has `min-width: 700px` and scrolls horizontally on narrow screens. On load it is scrolled so the visitor's longitude is in the middle, taken from the device's UTC offset at 15° per hour (`getTimezoneOffset() / 4` degrees, since the offset is in minutes). That is approximate: daylight saving shifts it by 15°, and a zone is wider than its meridian. The browser clamps the scroll, so on a wide screen where the map fits it does nothing.
 
 ## Cities
 - `CITIES` in `index.html`: name, IANA time zone, lat, lon, and `label` (the side of the dot the text sits on: r/l/t/b). Edit the list to change cities. Sides were chosen by a search so no labels, dots or date pills overlap at any time of day or width.

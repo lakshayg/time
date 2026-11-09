@@ -355,6 +355,9 @@ for (let i = 0; i < 24; i++) {   // the hour of the day at each tick, starting f
   $("hours").append(hour);
 }
 render();
+
+// On a narrow screen the map scrolls sideways, so start with the visitor's longitude in the middle: 15 degrees for each hour of UTC offset.
+$("map").parentElement.scrollLeft = ((-new Date().getTimezoneOffset() / 4 + 180) / 360) * map.clientWidth - map.parentElement.clientWidth / 2;
 setInterval(() => { if (fixed === null) render(false); }, 1000);
 </script>
 </body>
