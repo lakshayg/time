@@ -32,6 +32,9 @@
   .pin.day { --c: var(--sun); }
   .pin::before { content: ''; display: block; width: .7em; height: .7em; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .18em color-mix(in srgb, var(--c) 25%, transparent); }
   .pin span { position: absolute; color: var(--muted); padding: .2em .45em; border-radius: 4px; background: var(--card); transition: scale .12s ease-out; }
+  /* The visitor's city: a beacon. A disc the colour of the dot swells behind it and fades out, four times, then it rests. Only scale and opacity change, so the browser animates it without any script. */
+  .pin.me::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: 50%; background: var(--c); pointer-events: none; animation: beacon 2.4s ease-out 4 forwards; }
+  @keyframes beacon { from { scale: 1; opacity: .5; } to { scale: 5; opacity: 0; } }
   .pin:hover { z-index: 1; }
   .pin:hover span { scale: 1.15; }
   .map input { display: block; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; }
@@ -81,7 +84,7 @@
   details p { margin: .6rem 0 0; color: var(--muted); font-size: .92rem; }
   details b { color: var(--ink); }
   details a { color: var(--moon); }
-  @media (prefers-reduced-motion: reduce) { .pin span { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .pin span { transition: none; } .pin.me::after { animation: none; scale: 2.5; opacity: .3; } }   /* still: a soft halo instead of the pulse */
 </style>
 </head>
 <body>
@@ -228,6 +231,12 @@ for (const c of CITIES) {
   c.time.onchange = () => { const t = parseTime(c.time.value); if (t) setCityTime(c, t); };
   map.append(c.pin);
 }
+
+// A slight highlight on the city in the visitor's time zone. Only an exact match: another city with the same clock would be a wrong guess.
+// Both names go through the browser's own canonical spelling, so an old name for a zone (Asia/Calcutta) still matches.
+const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const mine = CITIES.find(c => c.fmt.resolvedOptions().timeZone === tz);
+if (mine) mine.pin.classList.add("me"), mine.pin.title = "Your time zone";
 for (const [id, hours] of [["dateL", -12], ["dateR", 12]]) {
   $(id).oninput = e => e.target.value && setDate(hours, e.target.value);
   $(id).onclick = e => { try { e.target.showPicker(); } catch {} };
