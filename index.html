@@ -27,6 +27,10 @@
   /* Its own layer: the rulers and the line move on every frame of a drag, and without this the browser redraws the whole coastline under them each time. */
   .map svg { position: absolute; inset: 0; width: 100%; height: 100%; will-change: transform; }
 
+  /* The sun and the moon, where each is overhead. Unlike a city's dot, the sun has a wide glow and the moon is pale with a dark rim. */
+  #sun { fill: var(--sun); stroke: var(--sun); stroke-width: 4; stroke-opacity: .25; }
+  #moon { fill: #fff; stroke: var(--moon); stroke-width: .8; }
+
   .pin { --c: var(--moon); position: absolute; translate: -50% -50%; white-space: nowrap; }
   .pin.day { --c: var(--sun); }
   .pin::before { content: ''; display: block; width: .7em; height: .7em; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 .18em color-mix(in srgb, var(--c) 25%, transparent); }
@@ -93,10 +97,14 @@
 
 <main>
   <div class="map" id="map">
-    <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the current day and night regions">
+    <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the day and night regions, the sun and the moon">
       <polygon id="night" fill="#182c60" fill-opacity=".3"/>
-      <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-      <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
+      <g id="sky">
+        <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+        <circle id="sun" r="2.5"><title>The sun is overhead here</title></circle>
+        <circle id="moon" r="1.8"><title></title></circle>
+      </g>
+      <use href="#sky" x="-360"/><use href="#sky" x="360"/>   <!-- the same again, shifted a world to either side, for where they run off the map -->
     </svg>
     <div class="drag ruler" id="grab" role="slider" tabindex="0" aria-label="Time. Drag either ruler, or use the arrow keys, to change it. Page Up and Page Down move a day."></div>
     <div class="drag ruler bottom" aria-hidden="true"></div>
@@ -113,6 +121,7 @@
   <summary>See something wrong?</summary>
   <p><b>Device clock.</b> Every time and date on this page starts from your device's clock. If it is off by a few minutes, everything shown here is off by the same amount. Turn on automatic date and time in your system settings to fix it.</p>
   <p><b>Timezone database.</b> Each city's daylight-saving rules come from a database built into your browser. If a country changed its rules recently and your browser hasn't caught up, that city can be off by an hour. Updating your browser fixes it.</p>
+  <p><b>Sun and moon.</b> The two dots without a name are where the sun and the moon are directly overhead. The sun is placed to within a twentieth of a degree and the moon to within one degree.</p>
   <p><b>Midnight line.</b> It is placed by longitude and bends around cities so that each one is on the side matching its date. Away from the cities, real time zone borders differ slightly.</p>
   <p><b>Still wrong?</b> Please <a href="https://github.com/lakshayg/time/issues">file an issue on GitHub</a>.</p>
 </details>
@@ -148,15 +157,26 @@ const $ = id => document.getElementById(id);
 const map = $("map"), grab = $("grab");
 const HOUR = 36e5, DAY = 864e5, MIN = 6e4;
 
-// Where the sun is directly overhead: declination (radians) and longitude (degrees), from the standard approximations.
-function sun(t) {
-  const n = (t - Date.UTC(new Date(t).getUTCFullYear(), 0, 0)) / DAY;        // day of year
-  const B = (n - 81) * 2 * Math.PI / 365;
-  const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);  // minutes
+// Where on the Earth a body is directly overhead: dec is the latitude of that point (radians) and lon its longitude (degrees).
+// l and b say where the body is among the stars (its ecliptic longitude and latitude, degrees), d days after noon on 1 January 2000.
+function overhead(l, b, d) {
+  const tilt = 23.44 * RAD;                                    // of the Earth's axis
+  l *= RAD, b *= RAD;
+  const ra = Math.atan2(Math.sin(l) * Math.cos(tilt) - Math.tan(b) * Math.sin(tilt), Math.cos(l));
   return {
-    dec: -23.44 * RAD * Math.cos((n + 10) * 2 * Math.PI / 365),
-    lon: -15 * ((t % DAY) / HOUR - 12 + eot / 60),
+    dec: Math.asin(Math.sin(b) * Math.cos(tilt) + Math.cos(b) * Math.sin(tilt) * Math.sin(l)),
+    lon: ((ra / RAD - 280.46 - 360.98565 * d) % 360 + 540) % 360 - 180,   // less how far the Earth has turned, brought into -180 to 180
   };
+}
+
+// The sun and the moon at instant t, from the Astronomical Almanac's low-precision formulas. Checked against a full ephemeris for 1970 to 2100:
+// the sun is within 0.05 degrees and the moon within 1 degree, which is 3 pixels at most. phase is how far the moon is ahead of the sun, in degrees.
+function sky(t) {
+  const d = t / DAY - 10957.5, sin = x => Math.sin(x * RAD);
+  const g = 357.53 + .9856 * d, M = 134.96 + 13.06499 * d, D = 297.85 + 12.19075 * d;   // where the sun and the moon are in their orbits, and the moon's lead on the sun
+  const sunL = 280.46 + .98565 * d + 1.915 * sin(g) + .02 * sin(2 * g);
+  const moonL = 218.32 + 13.1764 * d + 6.29 * sin(M) - 1.27 * sin(M - 2 * D) + .66 * sin(2 * D);
+  return { sun: overhead(sunL, 0, d), moon: overhead(moonL, 5.13 * sin(93.27 + 13.22935 * d), d), phase: moonL - sunL };
 }
 
 // The latitude of the sunrise/sunset line at a longitude. The sun is up north of it in summer (positive declination), south of it in winter.
@@ -254,7 +274,7 @@ map.onpointermove = e => {
   if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / map.clientWidth * DAY) / MIN) * MIN);
 };
 map.onpointerup = map.onpointercancel = () => { drag = null; };
-// The line moves left as time moves forward. Page Up and Page Down move a whole day: the line stays where it is, and the seasons move.
+// The line moves left as time moves forward. Page Up and Page Down move a whole day: the line stays where it is, and the sun, the moon and the seasons move.
 grab.onkeydown = e => {
   const step = { ArrowLeft: 1, ArrowRight: -1, PageUp: 96, PageDown: -96 }[e.key] * (e.shiftKey ? 4 : 1);   // in quarter hours
   if (!step) return;
@@ -314,7 +334,7 @@ let drawnMinute;
 function render() {
   const t = now();
   drawnMinute = Math.floor(t / MIN);
-  const s = sun(t);
+  const { sun, moon, phase } = sky(t);
   const f = 1 - ((t / DAY - .5) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width (the right edge at 12:00 UTC)
 
   // The dates come first: they are the only thing measured, and measuring after other changes forces a layout in the middle of the render.
@@ -328,7 +348,12 @@ function render() {
     $("hours").classList.toggle("no" + side, noRoom);
   }
 
-  $("night").setAttribute("points", nightPoints(s));
+  $("night").setAttribute("points", nightPoints(sun));
+  for (const [id, at] of [["sun", sun], ["moon", moon]]) {
+    $(id).setAttribute("cx", at.lon + 180);
+    $(id).setAttribute("cy", 90 - at.dec / RAD);
+  }
+  $("moon").firstChild.textContent = `The moon is overhead here, ${Math.round(50 - 50 * Math.cos(phase * RAD))}% lit and ${Math.sin(phase * RAD) > 0 ? "waxing" : "waning"}`;
   $("line").setAttribute("points", midnightLine(t, f * 360));
   $("mid").style.left = f * 100 + "%";
   $("hours").style.setProperty("--x", f * 100 + "%");   // on the rulers alone: set higher up, it makes the browser recheck every pin's style too
@@ -336,7 +361,7 @@ function render() {
   grab.setAttribute("aria-valuetext", spokenFmt.format(t));
 
   for (const c of CITIES) {
-    c.pin.classList.toggle("day", isDay(c, s));
+    c.pin.classList.toggle("day", isDay(c, sun));
     put(c.time, clock(wall(c, t)));
   }
 }

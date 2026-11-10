@@ -37,8 +37,11 @@ Pushing to `main` runs the workflow, which installs the packages, builds `land.s
 - Each label has two lines: name above, time below (monospace, `06:19 AM`). Labels grow slightly on hover (scale 1.15).
 - Your city: the city in the visitor's time zone (from `Intl.DateTimeFormat().resolvedOptions().timeZone`) gets a beacon (a disc the colour of its dot that swells and fades four times, 2.4 s each, then stops (`animation-fill-mode: forwards` keeps it invisible), drawn by the `::after` of the pin with a CSS animation of `scale` and `opacity`, so no script runs) and a "Your time zone" tooltip. With `prefers-reduced-motion` it is a still halo instead. Nothing is sent anywhere. Only an exact zone match counts, compared through the browser's own canonical zone names so an old name like `Asia/Calcutta` still matches. A visitor in a zone with no city (Manila, say) sees no highlight, because picking another city with the same clock would be a wrong guess.
 
-## Day and night
-- Sun position from day-of-year declination and the equation of time. The night region is a single polygon (the terminator closed through the dark pole), 30% opacity. Smooth bands were tried and dropped as unnecessary complexity.
+## Sun, moon, day and night
+- `sky(t)` gives where the sun and the moon are directly overhead, from the Astronomical Almanac's low-precision formulas: each body's ecliptic longitude (and the moon's latitude) as a few sine terms, which one shared function, `overhead()`, turns into a latitude and longitude on the Earth. Checked against a full ephemeris (PyEphem) at 5,000 random moments from 1970 to 2100: the sun is within 0.05° and the moon within 0.9°, about 3 pixels at the widest map. The earlier sun formula (day-of-year declination and the equation of time) was up to 1.4° out in latitude. The moon uses three longitude terms; with only the first it is up to 2.5° out.
+- Both are drawn as dots with no label, in the overlay SVG: the sun in the sun colour with a wide glow, the moon white with a rim in the moon colour. Hovering shows a tooltip; the moon's says how much of it is lit and whether it is waxing or waning (from how far it is ahead of the sun). They sit in a `<g id="sky">` with the midnight line, and the two `<use>` copies a world to either side cover all three.
+- For the curious: at a solar eclipse the moon's dot sits on the sun's (try 12 Aug 2026, 17:46 UTC), at a lunar eclipse they are on opposite sides of the world, and stepping a day at a time (Page Up) makes the sun trace the analemma while the night region tilts through the seasons.
+- The night region is a single polygon (the terminator closed through the dark pole), 30% opacity. Smooth bands were tried and dropped as unnecessary complexity.
 
 ## Time model
 - A single state: `fixed` (`null` = live, otherwise a frozen instant). `render()` updates everything from `now()`. While live, a once-a-second check redraws everything only when the minute changes (the map is the costly part to repaint, especially on phones). Any edit redraws at once. Reload returns to live (there is no "Now" button). The hint beside the title says "Drag a ruler, or edit any time or date." while live and "Paused. Reload to go live again." once frozen.
@@ -82,6 +85,7 @@ A collapsed `<details>` titled "See something wrong?" with four short paragraphs
 
 ## Checks worth keeping
 Sample every few minutes over several days and assert:
+- `sky(t)` against an ephemeris: sun within 0.05°, moon within 1°, lit fraction within 1 percentage point.
 - Every city is on the correct side of the line (later date to the right, equal allowed only at its exact 12:00 AM).
 - The line's step between samples is tiny beyond the meridian's own motion, including across 12:00 UTC.
 - Neighbouring boundaries never cross, and below 57°S and above 84°N the line is straight along its meridian, so both rulers agree with the clocks at the edges, and every ruler tick is a whole number of hours from the midnight line (within a pixel or two of rounding).
