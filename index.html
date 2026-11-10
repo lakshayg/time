@@ -17,9 +17,20 @@
   body { margin: 0 auto; padding: 1.5rem clamp(.75rem, 3vw, 2rem) 3rem; max-width: 1168px; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
   :focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 
-  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem; margin-bottom: 1rem; }
-  h1 { margin: 0; font: 600 1.6rem/1.2 ui-serif, Georgia, serif; }
-  #hint { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; margin-bottom: 1rem; }
+  h1 { margin: 0 .5rem 0 0; font: 600 1.6rem/1.2 ui-serif, Georgia, serif; }
+  /* The buttons beside the title are icons, drawn here in the page; each one's name is its title. Pause and play (go live) take turns in one place,
+     and the link on Copy link turns into a tick for a moment once it has copied. */
+  button { align-self: center; display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; color: inherit; border: 1px solid var(--line); border-radius: 8px; background: none; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button svg { width: 1rem; fill: currentColor; }
+  #copy svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  header:not(.paused) #live, .paused #pause, #copy:not(.done) path + path, .done path:first-child { display: none; }
+  /* The hint has two lines, one for live and one for paused, stacked in the same grid cell with only one of them visible. The cell is always
+     as big as the bigger line, so the header keeps its height, and the map its place under the finger, when a drag pauses the clock. */
+  header div { display: grid; margin-left: auto; }
+  header p { grid-area: 1 / 1; margin: 0; text-align: right; color: var(--muted); font-size: .9rem; }
+  header:not(.paused) p + p, .paused p:first-child { visibility: hidden; }
 
   main { overflow-x: auto; }
   .map { position: relative; min-width: 700px; aspect-ratio: 2 / 1; overflow: hidden; border: 1px solid var(--line); border-radius: 8px;
@@ -92,7 +103,13 @@
 <body>
 <header>
   <h1>World clock</h1>
-  <p id="hint">Drag a ruler, or edit any time or date.</p>
+  <button id="pause" title="Pause"><svg viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg></button>
+  <button id="live" title="Go live"><svg viewBox="0 0 16 16"><path d="M4.5 2.5v11l9-5.5z"/></svg></button>
+  <button id="copy" title="Copy link to this moment"><svg viewBox="0 0 16 16"><path d="M6.5 9.5l3-3M7 4.5l1-1A2.5 2.5 0 0 1 11.5 7l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"/><path d="M3 8.5l3.5 3.5 6.5-8"/></svg></button>
+  <div>
+    <p>Drag a ruler, or edit any time or date.</p>
+    <p>Paused. Press play to go live.</p>
+  </div>
 </header>
 
 <main>
@@ -194,10 +211,28 @@ const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", 
 const spokenFmt = new Intl.DateTimeFormat([], { dateStyle: "full", timeStyle: "short" });   // the moment in the visitor's own time, for screen readers
 const two = n => String(n).padStart(2, "0");
 
-// The moment being shown. null means live; otherwise it stays put until the page is reloaded.
-let fixed = null;
+// The moment being shown. null means live; otherwise it stays put until Go live is pressed. A paused moment is kept in the page's address,
+// as #2026-03-14T13:00Z, so the address is a link to it: whoever opens it sees the same map.
+const fromAddress = () => Date.parse(location.hash.slice(1)) || null;
+const toAddress = t => "#" + new Date(t).toISOString().slice(0, 16) + "Z";
+let fixed = fromAddress(), addressTimer;
 const now = () => fixed ?? Date.now();
-const setTime = t => { fixed = t; $("hint").textContent = "Paused. Reload to go live again."; render(); };
+function setTime(t) {
+  fixed = t;
+  render();
+  clearTimeout(addressTimer);   // the address follows a moment later, not on every frame of a drag: Safari allows 100 changes to it in 30 seconds
+  addressTimer = setTimeout(() => history.replaceState(null, "", fixed === null ? location.pathname + location.search : toAddress(fixed)), 200);
+}
+addEventListener("hashchange", () => { fixed = fromAddress(); render(); });   // the address was edited by hand, or Back was pressed
+// The three buttons. Pause and Go live swap places, so each hands the keyboard focus to the other.
+$("pause").onclick = () => { setTime(Math.floor(Date.now() / MIN) * MIN); $("live").focus(); };
+$("live").onclick = () => { setTime(null); $("pause").focus(); };
+// Copy link copies a link to the moment on the map, and shows a tick for a moment. While live that is the current minute, and the map stays live.
+// The link is made from the moment itself, not from the address, which may not have caught up yet.
+$("copy").onclick = () => navigator.clipboard.writeText(location.href.split("#")[0] + toAddress(now())).then(() => {
+  $("copy").classList.add("done");
+  setTimeout(() => $("copy").classList.remove("done"), 1500);
+});
 
 // A city's wall-clock time at instant t, and how far its zone is ahead of UTC then.
 const wall = (c, t) => Object.fromEntries(c.fmt.formatToParts(t).map(p => [p.type, +p.value]));
@@ -357,6 +392,7 @@ function render() {
   $("line").setAttribute("points", midnightLine(t, f * 360));
   $("mid").style.left = f * 100 + "%";
   $("hours").style.setProperty("--x", f * 100 + "%");   // on the rulers alone: set higher up, it makes the browser recheck every pin's style too
+  document.querySelector("header").classList.toggle("paused", fixed !== null);
   grab.setAttribute("aria-valuenow", Math.round(f * 100));
   grab.setAttribute("aria-valuetext", spokenFmt.format(t));
 
