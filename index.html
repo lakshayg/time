@@ -98,7 +98,7 @@
       <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
     </svg>
-    <div class="drag ruler" id="grab" role="slider" tabindex="0" aria-label="Time. Drag either ruler, or use the arrow keys, to change it."></div>
+    <div class="drag ruler" id="grab" role="slider" tabindex="0" aria-label="Time. Drag either ruler, or use the arrow keys, to change it. Page Up and Page Down move a day."></div>
     <div class="drag ruler bottom" aria-hidden="true"></div>
     <div id="mid">
       <div class="drag" aria-hidden="true"></div>
@@ -171,6 +171,7 @@ function nightPoints(s) {
 }
 
 const dateFmt = new Intl.DateTimeFormat([], { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+const spokenFmt = new Intl.DateTimeFormat([], { dateStyle: "full", timeStyle: "short" });   // the moment in the visitor's own time, for screen readers
 const two = n => String(n).padStart(2, "0");
 
 // The moment being shown. null means live; otherwise it stays put until the page is reloaded.
@@ -253,11 +254,12 @@ map.onpointermove = e => {
   if (drag) setTime(Math.round((drag.t - (e.clientX - drag.x) / map.clientWidth * DAY) / MIN) * MIN);
 };
 map.onpointerup = map.onpointercancel = () => { drag = null; };
-grab.onkeydown = e => {                               // the line moves left as time moves forward
-  const dir = { ArrowLeft: 1, ArrowRight: -1 }[e.key];
-  if (!dir) return;
+// The line moves left as time moves forward. Page Up and Page Down move a whole day: the line stays where it is, and the seasons move.
+grab.onkeydown = e => {
+  const step = { ArrowLeft: 1, ArrowRight: -1, PageUp: 96, PageDown: -96 }[e.key] * (e.shiftKey ? 4 : 1);   // in quarter hours
+  if (!step) return;
   e.preventDefault();
-  setTime(Math.round(now() / MIN) * MIN + dir * (e.shiftKey ? HOUR : 15 * MIN));
+  setTime(Math.round(now() / MIN) * MIN + step * 15 * MIN);
 };
 
 // A smooth curve x(y) through the points [y, x]: between neighbours it eases along half a cosine wave, so it never
@@ -331,6 +333,7 @@ function render() {
   $("mid").style.left = f * 100 + "%";
   $("hours").style.setProperty("--x", f * 100 + "%");   // on the rulers alone: set higher up, it makes the browser recheck every pin's style too
   grab.setAttribute("aria-valuenow", Math.round(f * 100));
+  grab.setAttribute("aria-valuetext", spokenFmt.format(t));
 
   for (const c of CITIES) {
     c.pin.classList.toggle("day", isDay(c, s));
