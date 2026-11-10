@@ -9,7 +9,7 @@ Static page: no framework, no bundler, no dependencies at runtime. Light mode on
 | `land.svg` | The map. Generated and not committed (it is in `.gitignore`), and loaded as the `.map` background (it is decoration, so it is not an `<img>`). Must sit next to `index.html`. |
 | `gen.mjs` | Generates the map as SVG on stdout. |
 | `package.json`, `package-lock.json` | Pin the two build-time packages (`world-atlas`, `topojson-client`) and define `npm run build`. Only the map needs a build step. |
-| `.github/workflows/pages.yml` | Builds the map and deploys the site to GitHub Pages on every push to `main`. |
+| `.github/workflows/pages.yaml` | Builds the map and deploys the site to GitHub Pages on every push to `main`. |
 
 ## Build and run
 ```sh
@@ -29,7 +29,7 @@ Pushing to `main` runs the workflow, which installs the packages, builds `land.s
 ## The map
 - One coordinate space everywhere: `x = longitude + 180`, `y = 90 - latitude`, `viewBox="0 0 360 180"`, `preserveAspectRatio="none"`. The map, night polygon, midnight line and pins (positioned by percentage) all line up.
 - `gen.mjs`: Natural Earth land 1:110m from the `world-atlas` package. Antarctica dropped, longitudes unwrapped across the antimeridian with copies shifted by ±360 (otherwise coastlines draw horizontal strips), 0.1° precision, a faint grid every 30°. The file is the biggest download, so it is written in whole tenths of a degree (viewBox `0 0 3600 1800`), each point as its step from the previous one: 62.6 KB became 31 KB, and 22 KB gzipped became 8.5 KB, with the same picture. The file header explains how to change the source.
-- The map has `min-width: 700px` and scrolls horizontally on narrow screens. On load it is scrolled so the visitor's longitude is in the middle, taken from the device's UTC offset at 15° per hour (`getTimezoneOffset() / 4` degrees, since the offset is in minutes). That is approximate: daylight saving shifts it by 15°, and a zone is wider than its meridian. The browser clamps the scroll, so on a wide screen where the map fits it does nothing.
+- The map has `min-width: 700px` and scrolls horizontally on narrow screens, inside `<main>` (the page's main landmark, which is the scroll container). On load it is scrolled so the visitor's longitude is in the middle, taken from the device's UTC offset at 15° per hour (the offset is in minutes and the map is 1440 of them wide, so the centre is at `.5 - getTimezoneOffset() / 1440` of its width). That is approximate: daylight saving shifts it by 15°, and a zone is wider than its meridian. The browser clamps the scroll, so on a wide screen where the map fits it does nothing.
 
 ## Cities
 - `CITIES` in `index.html`: name, IANA time zone, lat, lon, and `label` (the side of the dot the text sits on: r/l/t/b). Edit the list to change cities. Sides were chosen by a search so no labels, dots or date pills overlap at any time of day or width.
@@ -49,7 +49,7 @@ Pushing to `main` runs the workflow, which installs the packages, builds `land.s
 - Dates: the left pill is the date just before midnight, the right pill the date just after (the date at `t - 12h` and at `t + 12h`). There is no international date line, no UTC label, and no separate time card. The pills sit at the top edge, beside the straight part of the line. A pill hides when there is no room beside the line, and the ruler hours it was covering come back (see the ruler below).
 
 ## Dragging versus scrolling
-- Three things take a drag, all marked `.drag` (`touch-action: none`, `user-select: none`, `-webkit-touch-callout: none`, `cursor: ew-resize`): a 25px strip centred on the midnight line, and the two ruler bands (36px tall along the top and bottom edge). Nothing else on the map takes the pointer, so a drag that starts on one of them moves time, and scrolling the page or the map from anywhere else still works. (A vertical swipe that starts on one of them does not scroll the page.) The date pills and the city times sit above them and keep their own clicks. There is no separate handle: the line and the rulers are the handles. The hint beside the title mentions only the rulers, and the line works as a bonus.
+- Three things take a drag, all marked `.drag` (`touch-action: none`, `user-select: none`, `-webkit-touch-callout: none`, `cursor: ew-resize`): a 24px strip centred on the midnight line, and the two ruler bands (36px tall along the top and bottom edge). Nothing else on the map takes the pointer, so a drag that starts on one of them moves time, and scrolling the page or the map from anywhere else still works. (A vertical swipe that starts on one of them does not scroll the page.) The date pills and the city times sit above them and keep their own clicks. There is no separate handle: the line and the rulers are the handles. The hint beside the title mentions only the rulers, and the line works as a bonus.
 - The top ruler is the one slider for assistive tech (`role="slider"`, `tabindex="0"`); the others are the same control for the pointer only. Left/Right move 15 minutes (Shift: 1 hour). Keyboard focus shows as a ring around the top ruler.
 
 ## The midnight line
@@ -71,6 +71,7 @@ Everything is recomputed on every render (about 0.3 ms), because offsets change 
 Measured in headless Chrome, one `render()` per frame, as in a drag: about 5.5 ms of main-thread time per frame. The sums are cheap (the night polygon and the midnight line are about 0.2 ms each, the 20 clocks about 0.1 ms). The cost is in the browser: style, layout and paint.
 - `--x` is set on `#hours`, not on `.map`. A custom property set on `.map` makes the browser recheck the styles of everything inside it, pins included, which cost about 1.3 ms a frame. `#mid` is placed with `left` instead.
 - In `render()` the date pills come first. They are the only thing measured (`clientWidth`, `offsetWidth`), and measuring after other changes forces the browser to lay the page out in the middle of the render.
+- The overlay SVG (night shading and midnight line) has `will-change: transform`, which gives it its own compositor layer, and puts everything above it (rulers, pins) in another. The rulers and the line move on every frame of a drag and between them cover the whole map, so without this the browser re-rasterises the land path (about 5,700 points) every frame. Measured off the main thread in headless Chrome with software rendering: about 8.8 ms of rasterising per frame before, about 3.7 ms after. The cost is memory: one or two extra map-sized textures. Moving the land to its own layer (a `.map::before`) measured a little better (2.8 ms) but needs more CSS.
 - Tried and left alone: `contain` on the ruler (no change), and a lighter label halo (saves about 0.8 ms a frame but changes how the labels look). `pointermove` is already once per frame in browsers, so dragging needs no `requestAnimationFrame` throttle.
 
 ## iOS Safari

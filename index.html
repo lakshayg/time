@@ -13,20 +13,19 @@
     --moon: #3d5fd0;
     --line: #d3dde6;
     --card: rgba(255, 255, 255, .88);
-    color-scheme: light;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0 auto; padding: 1.5rem clamp(.75rem, 3vw, 2rem) 3rem; max-width: 1232px; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  body { margin: 0 auto; padding: 1.5rem clamp(.75rem, 3vw, 2rem) 3rem; max-width: 1168px; color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
   :focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem; margin-bottom: 1rem; }
   h1 { margin: 0; font: 600 1.6rem/1.2 ui-serif, Georgia, serif; }
-  .hint { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
+  #hint { margin: 0 0 0 auto; color: var(--muted); font-size: .9rem; }
 
-  .scroll { overflow-x: auto; }
+  main { overflow-x: auto; }
   .map { position: relative; min-width: 700px; aspect-ratio: 2 / 1; overflow: hidden; border: 1px solid var(--line); border-radius: 8px;
          background: url(land.svg) 0 0 / 100% 100% no-repeat #cfe3f0; font-size: clamp(9px, 1.15vw, 13px); line-height: 1.25; font-variant-numeric: tabular-nums; }
-  .map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* Its own layer: the rulers and the line move on every frame of a drag, and without this the browser redraws the whole coastline under them each time. */
+  .map svg { position: absolute; inset: 0; width: 100%; height: 100%; will-change: transform; }
 
   .pin { --c: var(--moon); position: absolute; translate: -50% -50%; white-space: nowrap; }
   .pin.day { --c: var(--sun); }
@@ -37,7 +36,7 @@
   @keyframes beacon { from { scale: 1; opacity: .5; } to { scale: 5; opacity: 0; } }
   .pin:hover { z-index: 1; }
   .pin:hover span { scale: 1.15; }
-  .map input { display: block; font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; }
+  .map input { display: block; background: none; border: 0; padding: 0; margin: 0; }
   .map input::-webkit-calendar-picker-indicator { display: none; }
   .map input:focus-visible { outline: none; }
   .pin input { color: var(--ink); font: 600 1em ui-monospace, "SF Mono", Menlo, Consolas, monospace; width: 8ch; border-radius: 3px; }
@@ -53,8 +52,7 @@
 
   /* The time is changed by dragging the midnight line or a ruler, and nothing else on the map takes the pointer, so the rest of it still scrolls.
      They take every drag (touch-action: none) and are not text: otherwise iOS Safari drops drags half way (see the README, iOS Safari). */
-  #mid { pointer-events: none; }   /* the line passes behind the city labels, so its handle is a strip around it */
-  #mid { position: absolute; top: 0; bottom: 0; width: 1.5px; translate: -50%; }
+  #mid { position: absolute; top: 0; bottom: 0; pointer-events: none; }   /* the line passes behind the city labels, so its handle is a strip around it */
   .drag { position: absolute; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: ew-resize; }
   #mid .drag { inset: 0 -12px; pointer-events: auto; }
   .ruler { top: 0; left: 0; right: 0; height: 36px; }
@@ -90,17 +88,17 @@
 <body>
 <header>
   <h1>World clock</h1>
-  <p class="hint" id="hint">Drag a ruler, or edit any time or date.</p>
+  <p id="hint">Drag a ruler, or edit any time or date.</p>
 </header>
 
-<div class="scroll">
+<main>
   <div class="map" id="map">
     <svg viewBox="0 0 360 180" preserveAspectRatio="none" role="img" aria-label="World map with the current day and night regions">
       <polygon id="night" fill="#182c60" fill-opacity=".3"/>
       <polyline id="line" fill="none" stroke="#16222e" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       <use href="#line" x="-360"/><use href="#line" x="360"/>   <!-- the same line, shifted a world to either side, for where it runs off the map -->
     </svg>
-    <div class="drag ruler" id="grab" role="slider" tabindex="0" aria-label="Time. Drag either ruler, or use the arrow keys, to change it." aria-valuemin="0" aria-valuemax="100"></div>
+    <div class="drag ruler" id="grab" role="slider" tabindex="0" aria-label="Time. Drag either ruler, or use the arrow keys, to change it."></div>
     <div class="drag ruler bottom" aria-hidden="true"></div>
     <div id="mid">
       <div class="drag" aria-hidden="true"></div>
@@ -109,7 +107,7 @@
     </div>
     <div id="hours"></div>
   </div>
-</div>
+</main>
 
 <details>
   <summary>See something wrong?</summary>
@@ -178,10 +176,10 @@ const two = n => String(n).padStart(2, "0");
 // The moment being shown. null means live; otherwise it stays put until the page is reloaded.
 let fixed = null;
 const now = () => fixed ?? Date.now();
-const setTime = t => { fixed = t; render(); };
+const setTime = t => { fixed = t; $("hint").textContent = "Paused. Reload to go live again."; render(); };
 
 // A city's wall-clock time at instant t, and how far its zone is ahead of UTC then.
-const wall = (c, t) => Object.fromEntries(c.fmt.formatToParts(t).filter(p => p.type !== "literal").map(p => [p.type, +p.value]));
+const wall = (c, t) => Object.fromEntries(c.fmt.formatToParts(t).map(p => [p.type, +p.value]));
 const zoneOffset = (c, t) => { const w = wall(c, t); return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second) - Math.floor(t / 1000) * 1000; };
 
 // "6:19 pm", "06:19PM", "18:19" and "619p" all work. Returns [hour, minute] (24 h), or null if it isn't a time.
@@ -189,9 +187,9 @@ function parseTime(text) {
   const m = /^(\d{1,2})(?:[:.\s]?(\d{2}))?\s*([ap])?\.?m?\.?$/i.exec(text.trim());
   if (!m) return null;
   let h = +m[1];
-  const min = +(m[2] || 0), pm = m[3] && m[3].toLowerCase() === "p";
+  const min = +m[2] || 0;
   if (min > 59 || (m[3] ? h < 1 || h > 12 : h > 23)) return null;
-  if (m[3]) h = h % 12 + (pm ? 12 : 0);
+  if (m[3]) h = h % 12 + (/p/i.test(m[3]) ? 12 : 0);
   return [h, min];
 }
 const clock = w => two(w.hour % 12 || 12) + ":" + two(w.minute) + (w.hour < 12 ? " AM" : " PM");
@@ -200,11 +198,11 @@ const clock = w => two(w.hour % 12 || 12) + ":" + two(w.minute) + (w.hour < 12 ?
 // so changing 11:58 PM to 12:10 AM moves forward 12 minutes, not back a day.
 function setCityTime(c, [h, m]) {
   const t = now(), w = wall(c, t);
-  let best = null;
+  let best = Infinity;
   for (const d of [-1, 0, 1]) {
     const local = Date.UTC(w.year, w.month - 1, w.day + d, h, m);           // the wall time, read as if it were UTC
     const moment = local - zoneOffset(c, local - zoneOffset(c, local));
-    if (best === null || Math.abs(moment - t) < Math.abs(best - t)) best = moment;
+    if (Math.abs(moment - t) < Math.abs(best - t)) best = moment;
   }
   setTime(best);
 }
@@ -217,10 +215,14 @@ function setDate(hours, value) {
   setTime(t + (Date.parse(value) / DAY - Math.floor((t + hours * HOUR) / DAY)) * DAY);
 }
 
+// A slight highlight on the city in the visitor's time zone. Only an exact match: another city with the same clock would be a wrong guess.
+// Both names go through the browser's own canonical spelling, so an old name for a zone (Asia/Calcutta) still matches.
+const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 for (const c of CITIES) {
   c.fmt = new Intl.DateTimeFormat("en-GB", { timeZone: c.tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" });
   c.pin = document.createElement("div");
   c.pin.className = "pin " + c.label;
+  if (c.fmt.resolvedOptions().timeZone === tz) c.pin.className += " me", c.pin.title = "Your time zone";
   c.pin.style.cssText = `left: ${(c.lon + 180) / 3.6}%; top: ${(90 - c.lat) / 1.8}%`;
   c.pin.innerHTML = `<span>${c.name}<input type="text" autocomplete="off" spellcheck="false" aria-label="${c.name} time"></span>`;
   c.time = c.pin.querySelector("input");
@@ -232,11 +234,6 @@ for (const c of CITIES) {
   map.append(c.pin);
 }
 
-// A slight highlight on the city in the visitor's time zone. Only an exact match: another city with the same clock would be a wrong guess.
-// Both names go through the browser's own canonical spelling, so an old name for a zone (Asia/Calcutta) still matches.
-const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const mine = CITIES.find(c => c.fmt.resolvedOptions().timeZone === tz);
-if (mine) mine.pin.classList.add("me"), mine.pin.title = "Your time zone";
 for (const [id, hours] of [["dateL", -12], ["dateR", 12]]) {
   $(id).oninput = e => e.target.value && setDate(hours, e.target.value);
   $(id).onclick = e => { try { e.target.showPicker(); } catch {} };
@@ -299,7 +296,7 @@ function midnightLine(t, x0) {
   }
   lines.sort((p, q) => p.z - q.z);
   const k = Math.max(0, Math.min(lines.length - 2, lines.findIndex(l => l.z > now) - 1));   // the two boundaries either side of "now"
-  const [from, to] = [lines[k], lines[k + 1]], mix = (now - from.z) / (to.z - from.z);
+  const from = lines[k], to = lines[k + 1], mix = (now - from.z) / (to.z - from.z);
   const ys = new Set([...CITIES.map(c => 90 - c.lat), ...Array(181).keys()]);
   return [...ys].sort((p, q) => p - q).map(y => {
     const x = (1 - mix) * from.at(y) + mix * to.at(y);                     // where the line is at this latitude
@@ -311,12 +308,10 @@ function midnightLine(t, x0) {
 const put = (el, value) => { if (el !== document.activeElement && el.value !== value) el.value = value; };
 
 // While live, everything is redrawn when the minute changes (the map is costly to repaint, especially on phones). Anything the person does redraws at once.
-const liveHint = $("hint").textContent;
-let drawnMinute = -1;
-function render(force = true) {
-  const t = now(), minute = Math.floor(t / MIN);
-  if (!force && minute === drawnMinute) return;
-  drawnMinute = minute;
+let drawnMinute;
+function render() {
+  const t = now();
+  drawnMinute = Math.floor(t / MIN);
   const s = sun(t);
   const f = 1 - ((t / DAY - .5) % 1 + 1) % 1;   // where it is midnight, as a fraction of the map width (the right edge at 12:00 UTC)
 
@@ -331,7 +326,6 @@ function render(force = true) {
     $("hours").classList.toggle("no" + side, noRoom);
   }
 
-  $("hint").textContent = fixed === null ? liveHint : "Paused. Reload to go live again.";
   $("night").setAttribute("points", nightPoints(s));
   $("line").setAttribute("points", midnightLine(t, f * 360));
   $("mid").style.left = f * 100 + "%";
@@ -345,7 +339,7 @@ function render(force = true) {
 }
 
 addEventListener("focusout", () => setTimeout(render));   // drop half-typed values once the field is left
-addEventListener("resize", () => render());               // the date pills hide when there is no room, which depends on the map width
+addEventListener("resize", render);                     // the date pills hide when there is no room, which depends on the map width
 for (let i = 0; i < 24; i++) {   // the hour of the day at each tick, starting from midnight
   const k = (i + 2) % 24;   // 0 to 4 for 10p to 2a, the hours around the dates
   const hour = document.createElement("span");
@@ -356,9 +350,10 @@ for (let i = 0; i < 24; i++) {   // the hour of the day at each tick, starting f
 }
 render();
 
-// On a narrow screen the map scrolls sideways, so start with the visitor's longitude in the middle: 15 degrees for each hour of UTC offset.
-$("map").parentElement.scrollLeft = ((-new Date().getTimezoneOffset() / 4 + 180) / 360) * map.clientWidth - map.parentElement.clientWidth / 2;
-setInterval(() => { if (fixed === null) render(false); }, 1000);
+// On a narrow screen the map scrolls sideways, so start with the visitor's longitude in the middle: the UTC offset is in minutes, and the map is 1440 of them wide.
+const main = map.parentElement;
+main.scrollLeft = (.5 - new Date().getTimezoneOffset() / 1440) * map.clientWidth - main.clientWidth / 2;
+setInterval(() => { if (fixed === null && Math.floor(Date.now() / MIN) !== drawnMinute) render(); }, 1000);
 </script>
 </body>
 </html>
